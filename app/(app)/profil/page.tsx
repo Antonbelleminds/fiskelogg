@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import CatchCard from '@/components/catches/CatchCard'
-import type { Profile, CatchWithProfile, FriendWithProfile } from '@/types/database'
+import type { Profile, FriendWithProfile } from '@/types/database'
 
 interface TeamWithMeta {
   id: string
@@ -16,7 +15,6 @@ interface TeamWithMeta {
 
 export default function ProfilPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
-  const [catches, setCatches] = useState<CatchWithProfile[]>([])
   const [friends, setFriends] = useState<FriendWithProfile[]>([])
   const [teams, setTeams] = useState<TeamWithMeta[]>([])
   const [loading, setLoading] = useState(true)
@@ -29,6 +27,8 @@ export default function ProfilPage() {
   const [editingName, setEditingName] = useState(false)
   const [newDisplayName, setNewDisplayName] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
 
@@ -62,12 +62,6 @@ export default function ProfilPage() {
 
       if (profileData) setProfile(profileData)
 
-      const res = await fetch('/api/catches?limit=50')
-      if (res.ok) {
-        const data = await res.json()
-        setCatches(data)
-      }
-
       await loadFriends()
       await loadTeams()
       setLoading(false)
@@ -93,6 +87,20 @@ export default function ProfilPage() {
       setEditingName(false)
     }
     setSavingName(false)
+  }
+
+  async function handleAvatarUpload(file: File) {
+    setUploadingAvatar(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await fetch('/api/upload-avatar', { method: 'POST', body: fd })
+      if (res.ok) {
+        const { url } = await res.json()
+        setProfile((prev) => prev ? { ...prev, avatar_url: url } : null)
+      }
+    } catch {}
+    setUploadingAvatar(false)
   }
 
   async function copyFriendCode() {
@@ -210,9 +218,6 @@ export default function ProfilPage() {
     )
   }
 
-  const speciesCount = new Set(catches.filter((c) => c.species).map((c) => c.species)).size
-  const heaviest = catches.reduce((max, c) => (c.weight_kg && c.weight_kg > (max?.weight_kg || 0) ? c : max), catches[0])
-
   const pendingRequests = friends.filter(
     (f) => f.status === 'pending' && f.addressee_id === userId
   )
@@ -225,8 +230,35 @@ export default function ProfilPage() {
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto">
       {/* Profile header */}
       <div className="text-center mb-6">
-        <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-3xl mx-auto mb-3">
-          🎣
+        {/* Avatar with upload */}
+        <div className="relative inline-block mb-3">
+          <button
+            onClick={() => avatarInputRef.current?.click()}
+            className="w-20 h-20 rounded-full overflow-hidden bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-3xl relative group"
+          >
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="Profilbild" className="w-full h-full object-cover" />
+            ) : (
+              <span>🎣</span>
+            )}
+            <div className="absolute inset-0 bg-black/30 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
+              </svg>
+            </div>
+            {uploadingAvatar && (
+              <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f) }}
+          />
         </div>
         {editingName ? (
           <div className="flex items-center justify-center gap-2 mt-1">
@@ -298,21 +330,6 @@ export default function ProfilPage() {
         </div>
       )}
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-200 dark:border-slate-700">
-          <div className="text-2xl font-semibold">{catches.length}</div>
-          <div className="text-xs text-slate-500">Fångster</div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-200 dark:border-slate-700">
-          <div className="text-2xl font-semibold">{speciesCount}</div>
-          <div className="text-xs text-slate-500">Arter</div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 rounded-xl p-3 text-center border border-slate-200 dark:border-slate-700">
-          <div className="text-2xl font-semibold">{heaviest?.weight_kg ? `${heaviest.weight_kg}` : '—'}</div>
-          <div className="text-xs text-slate-500">{heaviest?.weight_kg ? 'kg PB' : 'PB'}</div>
-        </div>
-      </div>
 
       {/* Pending friend requests */}
       {pendingRequests.length > 0 && (
@@ -519,20 +536,6 @@ export default function ProfilPage() {
           <p className="text-sm text-slate-500">Inga lag ännu. Skapa ett!</p>
         )}
       </div>
-
-      {/* Recent catches */}
-      <h2 className="text-lg font-semibold mb-3">Mina fångster</h2>
-      {catches.length > 0 ? (
-        <div className="space-y-4">
-          {catches.slice(0, 10).map((c) => (
-            <CatchCard key={c.id} catch={c} />
-          ))}
-        </div>
-      ) : (
-        <div className="text-center py-8 text-slate-500 text-sm">
-          Inga fångster ännu
-        </div>
-      )}
 
       {/* Logout */}
       <button

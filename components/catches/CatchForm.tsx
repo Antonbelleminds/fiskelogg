@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export const SPECIES_OPTIONS = [
   'Abborre', 'Gädda', 'Gös', 'Öring', 'Lax', 'Regnbåge', 'Röding', 'Harr',
@@ -105,6 +105,36 @@ interface CatchFormProps {
 
 export default function CatchForm({ initialData, onSave, saving, error, submitLabel = 'Spara fångst', onCancel }: CatchFormProps) {
   const [form, setForm] = useState<CatchFormData>(initialData)
+
+  // Sync background-loaded fields (geocode, weather, moon) into form state
+  // Only applies when parent updates initialData after initial mount (e.g. geocode returns)
+  useEffect(() => {
+    setForm(prev => {
+      const bgFields: (keyof CatchFormData)[] = [
+        'water_body', 'location_name',
+        'weather_temp_c', 'weather_condition', 'wind_speed_ms', 'wind_direction',
+        'cloud_cover_pct', 'precipitation_mm', 'pressure_hpa', 'humidity_pct',
+        'visibility_km', 'moon_phase', 'moon_illumination_pct',
+        'sunrise_time', 'sunset_time', 'is_golden_hour',
+        'ai_weather_description', 'ai_environment_notes',
+      ]
+      const updates: Partial<CatchFormData> = {}
+      for (const field of bgFields) {
+        const incoming = initialData[field]
+        const current = prev[field]
+        // Only overwrite if incoming has a value and current is empty/null/zero
+        if (incoming && !current) {
+          (updates as Record<string, unknown>)[field] = incoming
+        }
+      }
+      return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    initialData.water_body, initialData.location_name,
+    initialData.weather_condition, initialData.weather_temp_c,
+    initialData.moon_phase, initialData.pressure_hpa,
+  ])
 
   function updateForm(updates: Partial<CatchFormData>) {
     setForm(prev => ({ ...prev, ...updates }))
