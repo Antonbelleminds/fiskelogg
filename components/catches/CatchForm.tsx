@@ -117,6 +117,8 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
         'visibility_km', 'moon_phase', 'moon_illumination_pct',
         'sunrise_time', 'sunset_time', 'is_golden_hour',
         'ai_weather_description', 'ai_environment_notes',
+        'species', 'species_confidence', 'ai_fish_description',
+        'catcher_name',
       ]
       const updates: Partial<CatchFormData> = {}
       for (const field of bgFields) {
@@ -134,6 +136,7 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
     initialData.water_body, initialData.location_name,
     initialData.weather_condition, initialData.weather_temp_c,
     initialData.moon_phase, initialData.pressure_hpa,
+    initialData.species, initialData.ai_fish_description,
   ])
 
   function updateForm(updates: Partial<CatchFormData>) {

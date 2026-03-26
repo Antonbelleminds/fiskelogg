@@ -365,7 +365,7 @@ function FeedCard({ catch: c, showUser = false }: { catch: CatchWithProfile; sho
               {format(new Date(c.caught_at), 'd MMM', { locale: sv })}
             </div>
             <div className="text-xs text-slate-400">
-              {format(new Date(c.caught_at), 'yyyy')}
+              {format(new Date(c.caught_at), 'HH:mm')} &middot; {format(new Date(c.caught_at), 'yyyy')}
             </div>
           </div>
         </div>

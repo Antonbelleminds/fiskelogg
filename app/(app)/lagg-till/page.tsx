@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { extractExif } from '@/lib/exif'
-import CatchForm, { getDefaultFormData, type CatchFormData } from '@/components/catches/CatchForm'
+import CatchForm, { getDefaultFormData, SPECIES_OPTIONS, type CatchFormData } from '@/components/catches/CatchForm'
 import type { ImageAnalysis } from '@/types/database'
 import { invalidateCache } from '@/lib/cache'
 
@@ -123,9 +123,19 @@ export default function AddCatchPage() {
       if (res.ok) {
         const analysis: ImageAnalysis = await res.json()
         setAnalysisResult(analysis)
+
+        // Match AI species to dropdown options (case-insensitive)
+        let matchedSpecies = ''
+        if (analysis.species) {
+          const aiSpecies = analysis.species.trim().toLowerCase()
+          matchedSpecies = SPECIES_OPTIONS.find(
+            s => s.toLowerCase() === aiSpecies
+          ) || analysis.species // Keep AI value even if not in list
+        }
+
         setFormData(prev => ({
           ...prev,
-          species: analysis.species || prev.species,
+          species: matchedSpecies || prev.species,
           species_confidence: analysis.species_confidence || 0,
           ai_fish_description: analysis.fish_description || '',
           ai_weather_description: analysis.weather_description || '',
