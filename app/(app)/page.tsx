@@ -19,6 +19,9 @@ export default function HomePage() {
   const [friendsLoading, setFriendsLoading] = useState(false)
   const [friendsLoaded, setFriendsLoaded] = useState(false)
   const [activeTab, setActiveTab] = useState<Tab>('mine')
+  const [filterSpecies, setFilterSpecies] = useState('')
+  const [filterMethod, setFilterMethod] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
   const pageRef = useRef(0)
   const PAGE_SIZE = 10
 
@@ -83,7 +86,12 @@ export default function HomePage() {
     )
   }
 
-  const activeCatches = activeTab === 'mine' ? myCatches : friendCatches
+  const rawCatches = activeTab === 'mine' ? myCatches : friendCatches
+  const activeCatches = rawCatches.filter((c) => {
+    if (filterSpecies && c.species !== filterSpecies) return false
+    if (filterMethod && c.fishing_method !== filterMethod) return false
+    return true
+  })
   const totalCatches = myCatches.length
   const heaviest = myCatches.reduce((max, c) =>
     c.weight_kg && c.weight_kg > (max?.weight_kg || 0) ? c : max, myCatches[0]
@@ -136,6 +144,61 @@ export default function HomePage() {
           </button>
         </div>
       </div>
+
+      {/* Filter bar */}
+      {activeTab === 'mine' && (
+        <div className="px-4 mb-3">
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 transition"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+            </svg>
+            Filtrera
+            {(filterSpecies || filterMethod) && (
+              <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-700 text-white text-[10px]">
+                {[filterSpecies, filterMethod].filter(Boolean).length}
+              </span>
+            )}
+          </button>
+
+          {showFilters && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select
+                value={filterSpecies}
+                onChange={(e) => setFilterSpecies(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none"
+              >
+                <option value="">Alla arter</option>
+                {Array.from(new Set(myCatches.filter(c => c.species).map(c => c.species!))).sort().map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+
+              <select
+                value={filterMethod}
+                onChange={(e) => setFilterMethod(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none"
+              >
+                <option value="">Alla metoder</option>
+                {Array.from(new Set(myCatches.filter(c => c.fishing_method).map(c => c.fishing_method!))).sort().map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+
+              {(filterSpecies || filterMethod) && (
+                <button
+                  onClick={() => { setFilterSpecies(''); setFilterMethod('') }}
+                  className="text-xs px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 border border-red-200 dark:border-red-800"
+                >
+                  Rensa
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Feed */}
       {activeTab === 'friends' && friendsLoading ? (

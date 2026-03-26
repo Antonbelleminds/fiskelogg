@@ -113,4 +113,6 @@ export interface ImageAnalysis {
   environment_notes: string
   season_guess: string
   water_type: string
+  person_visible: boolean
+  person_description: string | null
 }
