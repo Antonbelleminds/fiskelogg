@@ -126,12 +126,17 @@ export async function POST(req: NextRequest) {
     }
 
     // Update total_catches count
-    await admin.rpc('', {}).catch(() => {})
-    await admin
-      .from('profiles')
-      .update({ total_catches: admin.rpc ? undefined : 0 })
-      .eq('id', user.id)
-      .catch(() => {})
+    const { count } = await admin
+      .from('catches')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    if (count !== null) {
+      await admin
+        .from('profiles')
+        .update({ total_catches: count })
+        .eq('id', user.id)
+    }
 
     return NextResponse.json(data, { status: 201 })
   } catch (error) {
