@@ -16,16 +16,25 @@ interface Catch {
   lure_type: string | null
   location_name: string | null
   image_url: string | null
+  pressure_hpa: number | null
 }
 
 interface DrillDownState {
   [key: string]: boolean
 }
 
+function pressureBucket(hpa: number | null): string {
+  if (hpa === null) return ''
+  if (hpa < 990) return 'Lågt (< 990 hPa)'
+  if (hpa <= 1015) return 'Normalt (990–1015 hPa)'
+  return 'Högt (> 1015 hPa)'
+}
+
 export default function StatsPage() {
   const [catches, setCatches] = useState<Catch[]>([])
   const [loading, setLoading] = useState(true)
   const [drillDown, setDrillDown] = useState<DrillDownState>({})
+  const [filterSpecies, setFilterSpecies] = useState('')
 
   useEffect(() => {
     async function fetchCatches() {
@@ -48,22 +57,19 @@ export default function StatsPage() {
     setDrillDown((prev) => ({ ...prev, [section]: !prev[section] }))
   }
 
-  // === Computed stats ===
-
+  // All-catch stats (unfiltered)
   const totalCatches = catches.length
 
   const uniqueSpecies = useMemo(() => {
-    const set = new Set(catches.map((c) => c.species).filter(Boolean))
-    return set.size
+    return new Set(catches.map((c) => c.species).filter(Boolean)).size
   }, [catches])
 
   const pbWeight = useMemo(() => {
-    const max = catches.reduce<Catch | null>((best, c) => {
+    return catches.reduce<Catch | null>((best, c) => {
       if (!c.weight_kg) return best
       if (!best || c.weight_kg > (best.weight_kg || 0)) return c
       return best
     }, null)
-    return max
   }, [catches])
 
   const favoriteWater = useMemo(() => {
@@ -71,23 +77,9 @@ export default function StatsPage() {
     catches.forEach((c) => {
       if (c.water_body) counts[c.water_body] = (counts[c.water_body] || 0) + 1
     })
-    let best = ''
-    let max = 0
-    Object.entries(counts).forEach(([k, v]) => {
-      if (v > max) { best = k; max = v }
-    })
+    let best = ''; let max = 0
+    Object.entries(counts).forEach(([k, v]) => { if (v > max) { best = k; max = v } })
     return best
-  }, [catches])
-
-  const catchesByHour = useMemo(() => {
-    const hours = Array(24).fill(0)
-    catches.forEach((c) => {
-      if (c.caught_at) {
-        const h = new Date(c.caught_at).getHours()
-        hours[h]++
-      }
-    })
-    return hours
   }, [catches])
 
   const speciesBreakdown = useMemo(() => {
@@ -96,50 +88,76 @@ export default function StatsPage() {
       const sp = c.species || 'Okänd'
       counts[sp] = (counts[sp] || 0) + 1
     })
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-  }, [catches])
-
-  const weatherBreakdown = useMemo(() => {
-    const counts: Record<string, number> = {}
-    catches.forEach((c) => {
-      if (c.weather_condition) counts[c.weather_condition] = (counts[c.weather_condition] || 0) + 1
-    })
     return Object.entries(counts).sort((a, b) => b[1] - a[1])
   }, [catches])
 
-  const moonBreakdown = useMemo(() => {
-    const counts: Record<string, number> = {}
-    catches.forEach((c) => {
-      if (c.moon_phase) counts[c.moon_phase] = (counts[c.moon_phase] || 0) + 1
-    })
-    return Object.entries(counts).sort((a, b) => b[1] - a[1])
-  }, [catches])
+  const allSpecies = useMemo(() =>
+    speciesBreakdown.map(([s]) => s).filter((s) => s !== 'Okänd'),
+  [speciesBreakdown])
 
   const topLocations = useMemo(() => {
     const counts: Record<string, number> = {}
     catches.forEach((c) => {
       if (c.water_body) counts[c.water_body] = (counts[c.water_body] || 0) + 1
     })
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5)
   }, [catches])
 
-  function getCatchesFor(section: string, filterKey: string, filterValue: string): Catch[] {
-    if (section === 'hour') {
-      return catches.filter((c) => {
-        if (!c.caught_at) return false
-        return new Date(c.caught_at).getHours().toString() === filterValue
-      })
-    }
-    return catches.filter((c) => {
-      const val = c[filterKey as keyof Catch]
-      return val === filterValue || (!val && filterValue === 'Okänd')
+  // Filtered catches (for Tidpunkt, Väder, Månfas, Lufttryck)
+  const filteredCatches = useMemo(() => {
+    if (!filterSpecies) return catches
+    return catches.filter((c) => c.species === filterSpecies)
+  }, [catches, filterSpecies])
+
+  const catchesByHour = useMemo(() => {
+    const hours = Array(24).fill(0)
+    filteredCatches.forEach((c) => {
+      if (c.caught_at) hours[new Date(c.caught_at).getHours()]++
+    })
+    return hours
+  }, [filteredCatches])
+
+  const weatherBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {}
+    filteredCatches.forEach((c) => {
+      if (c.weather_condition) counts[c.weather_condition] = (counts[c.weather_condition] || 0) + 1
+    })
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [filteredCatches])
+
+  const moonBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {}
+    filteredCatches.forEach((c) => {
+      if (c.moon_phase) counts[c.moon_phase] = (counts[c.moon_phase] || 0) + 1
+    })
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])
+  }, [filteredCatches])
+
+  const pressureBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {}
+    filteredCatches.forEach((c) => {
+      const bucket = pressureBucket(c.pressure_hpa)
+      if (bucket) counts[bucket] = (counts[bucket] || 0) + 1
+    })
+    // Sort by pressure low→high
+    const order = ['Lågt (< 990 hPa)', 'Normalt (990–1015 hPa)', 'Högt (> 1015 hPa)']
+    return order.filter((k) => counts[k]).map((k) => [k, counts[k]] as [string, number])
+  }, [filteredCatches])
+
+  function getCatchesForHour(h: number): Catch[] {
+    return filteredCatches.filter((c) => c.caught_at && new Date(c.caught_at).getHours() === h)
+  }
+
+  function getCatchesForField(field: keyof Catch, value: string): Catch[] {
+    return filteredCatches.filter((c) => {
+      const v = c[field]
+      return v === value || (!v && value === 'Okänd')
     })
   }
 
-  // === Render ===
+  function getCatchesForPressure(bucket: string): Catch[] {
+    return filteredCatches.filter((c) => pressureBucket(c.pressure_hpa) === bucket)
+  }
 
   if (loading) {
     return (
@@ -188,44 +206,7 @@ export default function StatsPage() {
         <StatCard label="Favoritvatten" value={favoriteWater || '-'} color="bg-purple-50 dark:bg-purple-900/20" small />
       </div>
 
-      {/* Time analysis */}
-      <Section
-        title="Tidpunkt"
-        icon={<ClockIcon />}
-        bgClass="bg-sky-50 dark:bg-sky-900/20"
-        isOpen={!!drillDown['time']}
-        onToggle={() => toggleDrillDown('time')}
-      >
-        <div className="flex items-end gap-[2px] h-32">
-          {catchesByHour.map((count, h) => (
-            <div key={h} className="flex-1 flex flex-col items-center justify-end h-full">
-              <div
-                className="w-full bg-sky-500 dark:bg-sky-400 rounded-t-sm min-h-[2px] transition-all"
-                style={{ height: maxHour > 0 ? `${(count / maxHour) * 100}%` : '2px' }}
-                title={`${h}:00 - ${count} fångster`}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-between mt-1 text-[9px] text-slate-400">
-          <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
-        </div>
-        {drillDown['time'] && (
-          <DrillDownList>
-            {catchesByHour.map((count, h) =>
-              count > 0 ? (
-                <DrillDownItem key={h} label={`${h.toString().padStart(2, '0')}:00`} count={count}>
-                  {getCatchesFor('hour', '', h.toString()).map((c) => (
-                    <CatchRow key={c.id} c={c} />
-                  ))}
-                </DrillDownItem>
-              ) : null
-            )}
-          </DrillDownList>
-        )}
-      </Section>
-
-      {/* Species breakdown */}
+      {/* Species breakdown (unfiltered) */}
       <Section
         title="Arter"
         icon={<FishIcon />}
@@ -253,11 +234,75 @@ export default function StatsPage() {
           <DrillDownList>
             {speciesBreakdown.map(([species, count]) => (
               <DrillDownItem key={species} label={species} count={count}>
-                {getCatchesFor('', 'species', species).map((c) => (
-                  <CatchRow key={c.id} c={c} />
-                ))}
+                {catches
+                  .filter((c) => (c.species || 'Okänd') === species)
+                  .map((c) => <CatchRow key={c.id} c={c} />)}
               </DrillDownItem>
             ))}
+          </DrillDownList>
+        )}
+      </Section>
+
+      {/* Species filter for analysis sections */}
+      <div className="mb-4 flex items-center gap-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400 shrink-0">Filtrera analys:</span>
+        <select
+          value={filterSpecies}
+          onChange={(e) => setFilterSpecies(e.target.value)}
+          className="flex-1 text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">Alla arter</option>
+          {allSpecies.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        {filterSpecies && (
+          <button
+            onClick={() => setFilterSpecies('')}
+            className="text-xs text-red-500 hover:text-red-700 shrink-0"
+          >
+            Rensa
+          </button>
+        )}
+      </div>
+
+      {filterSpecies && (
+        <p className="text-xs text-primary-700 dark:text-primary-300 mb-4 px-1">
+          Visar analys för: <strong>{filterSpecies}</strong> ({filteredCatches.length} fångster)
+        </p>
+      )}
+
+      {/* Time analysis */}
+      <Section
+        title="Tidpunkt"
+        icon={<ClockIcon />}
+        bgClass="bg-sky-50 dark:bg-sky-900/20"
+        isOpen={!!drillDown['time']}
+        onToggle={() => toggleDrillDown('time')}
+      >
+        <div className="flex items-end gap-[2px] h-32">
+          {catchesByHour.map((count, h) => (
+            <div key={h} className="flex-1 flex flex-col items-center justify-end h-full">
+              <div
+                className="w-full bg-sky-500 dark:bg-sky-400 rounded-t-sm min-h-[2px] transition-all"
+                style={{ height: maxHour > 0 ? `${(count / maxHour) * 100}%` : '2px' }}
+                title={`${h}:00 - ${count} fångster`}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between mt-1 text-[9px] text-slate-400">
+          <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+        </div>
+        {drillDown['time'] && (
+          <DrillDownList>
+            {catchesByHour.map((count, h) =>
+              count > 0 ? (
+                <DrillDownItem key={h} label={`${h.toString().padStart(2, '0')}:00`} count={count}>
+                  {getCatchesForHour(h).map((c) => <CatchRow key={c.id} c={c} />)}
+                </DrillDownItem>
+              ) : null
+            )}
           </DrillDownList>
         )}
       </Section>
@@ -286,7 +331,7 @@ export default function StatsPage() {
             <DrillDownList>
               {weatherBreakdown.map(([condition, count]) => (
                 <DrillDownItem key={condition} label={condition} count={count}>
-                  {getCatchesFor('', 'weather_condition', condition).map((c) => (
+                  {getCatchesForField('weather_condition', condition).map((c) => (
                     <CatchRow key={c.id} c={c} />
                   ))}
                 </DrillDownItem>
@@ -320,7 +365,46 @@ export default function StatsPage() {
             <DrillDownList>
               {moonBreakdown.map(([phase, count]) => (
                 <DrillDownItem key={phase} label={phase} count={count}>
-                  {getCatchesFor('', 'moon_phase', phase).map((c) => (
+                  {getCatchesForField('moon_phase', phase).map((c) => (
+                    <CatchRow key={c.id} c={c} />
+                  ))}
+                </DrillDownItem>
+              ))}
+            </DrillDownList>
+          )}
+        </Section>
+      )}
+
+      {/* Air pressure analysis */}
+      {pressureBreakdown.length > 0 && (
+        <Section
+          title="Lufttryck"
+          icon={<PressureIcon />}
+          bgClass="bg-teal-50 dark:bg-teal-900/20"
+          isOpen={!!drillDown['pressure']}
+          onToggle={() => toggleDrillDown('pressure')}
+        >
+          <div className="grid grid-cols-1 gap-2">
+            {pressureBreakdown.map(([bucket, count]) => (
+              <div
+                key={bucket}
+                className="px-3 py-2 bg-white dark:bg-slate-800 rounded-lg border border-slate-100 dark:border-slate-700 flex items-center justify-between"
+              >
+                <div>
+                  <p className="text-sm font-medium dark:text-slate-200">{bucket}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {bucket.startsWith('Lågt') ? 'Storm / oväder' : bucket.startsWith('Normalt') ? 'Stabilt väder' : 'Högtrycksväder'}
+                  </p>
+                </div>
+                <p className="text-2xl font-bold text-teal-600 dark:text-teal-400">{count}</p>
+              </div>
+            ))}
+          </div>
+          {drillDown['pressure'] && (
+            <DrillDownList>
+              {pressureBreakdown.map(([bucket, count]) => (
+                <DrillDownItem key={bucket} label={bucket} count={count}>
+                  {getCatchesForPressure(bucket).map((c) => (
                     <CatchRow key={c.id} c={c} />
                   ))}
                 </DrillDownItem>
@@ -362,9 +446,9 @@ export default function StatsPage() {
             <DrillDownList>
               {topLocations.map(([name, count]) => (
                 <DrillDownItem key={name} label={name} count={count}>
-                  {getCatchesFor('', 'water_body', name).map((c) => (
-                    <CatchRow key={c.id} c={c} />
-                  ))}
+                  {catches
+                    .filter((c) => c.water_body === name)
+                    .map((c) => <CatchRow key={c.id} c={c} />)}
                 </DrillDownItem>
               ))}
             </DrillDownList>
@@ -414,10 +498,7 @@ function Section({ title, icon, bgClass, isOpen, onToggle, children }: {
         </span>
         <svg
           className={`w-4 h-4 text-slate-400 transform transition-transform ${isOpen ? 'rotate-180' : ''}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={2}
-          stroke="currentColor"
+          fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
         </svg>
@@ -436,9 +517,7 @@ function DrillDownList({ children }: { children: React.ReactNode }) {
 }
 
 function DrillDownItem({ label, count, children }: {
-  label: string
-  count: number
-  children: React.ReactNode
+  label: string; count: number; children: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
   return (
@@ -501,6 +580,14 @@ function MoonIcon() {
   return (
     <svg className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+    </svg>
+  )
+}
+
+function PressureIcon() {
+  return (
+    <svg className="w-4 h-4 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
     </svg>
   )
 }
