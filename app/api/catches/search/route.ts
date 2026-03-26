@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAnthropicClient } from '@/lib/anthropic'
 
+export const maxDuration = 30
+
 interface CatchSearchItem {
   id: string
   species: string | null

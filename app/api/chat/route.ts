@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import { createAnthropicClient } from '@/lib/anthropic'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/server'
 
+export const maxDuration = 30
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()

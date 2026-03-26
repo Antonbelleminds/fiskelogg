@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     // Fetch with all relevant types in one call
     const res = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi,place,locality,district,region&language=sv&limit=10&access_token=${token}`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi,place,locality,district,region&language=sv&access_token=${token}`
     )
 
     if (!res.ok) throw new Error('Geocoding failed')
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
     // If still no water body, try a dedicated water-focused POI search
     if (!waterBody) {
       const poiRes = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi&language=sv&limit=10&access_token=${token}`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi&language=sv&limit=5&access_token=${token}`
       )
       if (poiRes.ok) {
         const poiData = await poiRes.json()
