@@ -117,6 +117,7 @@ export default function CatchDetailPage() {
       fishing_method: c.fishing_method || '',
       lure_type: c.lure_type || '',
       lure_color: c.lure_color || '',
+      lure_name: c.lure_name || '',
       depth_m: c.depth_m?.toString() || '',
       bottom_structure: c.bottom_structure || '',
       water_temp_c: c.water_temp_c?.toString() || '',
@@ -245,7 +246,8 @@ export default function CatchDetailPage() {
           <InfoBox label="Datum" value={format(new Date(c.caught_at), 'd MMMM yyyy HH:mm', { locale: sv })} />
           {c.water_body && <InfoBox label="Vatten" value={c.water_body} />}
           {c.fishing_method && <InfoBox label="Metod" value={c.fishing_method} />}
-          {c.lure_type && <InfoBox label="Bete" value={`${c.lure_type}${c.lure_color ? ` (${c.lure_color})` : ''}`} />}
+          {c.lure_type && <InfoBox label="Betetyp" value={`${c.lure_type}${c.lure_color ? ` (${c.lure_color})` : ''}`} />}
+          {c.lure_name && <InfoBox label="Bete" value={c.lure_name} />}
           {c.depth_m && <InfoBox label="Djup" value={`${c.depth_m} m`} />}
           {c.bottom_structure && <InfoBox label="Botten" value={c.bottom_structure} />}
         </div>

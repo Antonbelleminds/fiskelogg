@@ -157,6 +157,7 @@ export async function POST(req: NextRequest) {
         fishing_method: body.fishing_method || null,
         lure_type: body.lure_type || null,
         lure_color: body.lure_color || null,
+        lure_name: body.lure_name || null,
         depth_m: body.depth_m || null,
         bottom_structure: body.bottom_structure || null,
         water_temp_c: body.water_temp_c || null,

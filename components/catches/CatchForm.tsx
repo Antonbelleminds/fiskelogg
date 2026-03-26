@@ -27,6 +27,7 @@ export interface CatchFormData {
   fishing_method: string
   lure_type: string
   lure_color: string
+  lure_name: string
   depth_m: string
   bottom_structure: string
   water_temp_c: string
@@ -68,6 +69,7 @@ export function getDefaultFormData(): CatchFormData {
     fishing_method: '',
     lure_type: '',
     lure_color: '',
+    lure_name: '',
     depth_m: '',
     bottom_structure: '',
     water_temp_c: '',
@@ -278,6 +280,16 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
           />
         </FieldGroup>
       </div>
+
+      <FieldGroup label="Bete (fritext)">
+        <input
+          type="text"
+          value={form.lure_name}
+          onChange={(e) => updateForm({ lure_name: e.target.value })}
+          placeholder="T.ex. Toby 18g, Rapala X-Rap 10cm..."
+          className="input-field"
+        />
+      </FieldGroup>
 
       {/* Djup & Botten */}
       <div className="grid grid-cols-2 gap-3">

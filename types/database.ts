@@ -25,6 +25,7 @@ export interface Catch {
   fishing_method: string | null
   lure_type: string | null
   lure_color: string | null
+  lure_name: string | null
   depth_m: number | null
   bottom_structure: string | null
   water_temp_c: number | null

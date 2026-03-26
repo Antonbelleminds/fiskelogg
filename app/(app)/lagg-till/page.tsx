@@ -188,6 +188,7 @@ export default function AddCatchPage() {
         fishing_method: data.fishing_method || null,
         lure_type: data.lure_type || null,
         lure_color: data.lure_color || null,
+        lure_name: data.lure_name || null,
         bottom_structure: data.bottom_structure || null,
         is_public: data.is_public ?? false,
         notes: data.notes || null,
