@@ -135,7 +135,7 @@ export default function HomePage() {
     <div className="max-w-lg mx-auto">
       {/* Header */}
       <div className="px-4 pt-6 pb-3">
-        <h1 className="text-2xl font-semibold">Hej, {username}! 🎣</h1>
+        <h1 className="text-2xl font-semibold">Hej, {username}!</h1>
       </div>
 
       {/* Tab bar */}
@@ -253,7 +253,9 @@ export default function HomePage() {
       ) : (
         <div className="px-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 text-center border border-slate-200 dark:border-slate-700">
-            <div className="text-5xl mb-4">{activeTab === 'mine' ? '🎣' : '👥'}</div>
+            <div className="mb-4 flex justify-center text-slate-300">
+              {activeTab === 'mine' ? <FishingIcon /> : <UsersIcon />}
+            </div>
             <h2 className="text-lg font-semibold mb-2">
               {activeTab === 'mine' ? 'Välkommen till FiskeLogg!' : 'Inga vänners fångster'}
             </h2>
@@ -295,9 +297,9 @@ export default function HomePage() {
             <div className="bg-primary-50 dark:bg-primary-900/20 rounded-xl p-3 border border-primary-100 dark:border-primary-800">
               <h3 className="text-xs font-semibold text-primary-800 dark:text-primary-200 mb-1.5">Insikter</h3>
               <div className="space-y-1 text-xs text-primary-700 dark:text-primary-300">
-                {bestHour && <p>🕐 Bästa tid: kl {bestHour[0]}:00</p>}
-                {bestLure && <p>🪝 Bästa bete: {bestLure[0]}</p>}
-                {bestWater && <p>💧 Hetaste vatten: {bestWater[0]}</p>}
+                {bestHour && <p>Bästa tid: kl {bestHour[0]}:00</p>}
+                {bestLure && <p>Bästa bete: {bestLure[0]}</p>}
+                {bestWater && <p>Hetaste vatten: {bestWater[0]}</p>}
               </div>
             </div>
           )}
@@ -313,8 +315,8 @@ function FeedCard({ catch: c, showUser = false }: { catch: CatchWithProfile; sho
       {/* User line */}
       {showUser && c.profiles && (
         <div className="px-4 pt-3 pb-1 flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs">
-            👤
+          <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-400">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
           </div>
           <span className="text-sm font-medium">
             {c.profiles.display_name || c.profiles.username}
@@ -334,7 +336,7 @@ function FeedCard({ catch: c, showUser = false }: { catch: CatchWithProfile; sho
         </div>
       ) : (
         <div className="aspect-[4/3] bg-gradient-to-br from-primary-100 to-primary-50 dark:from-primary-900/30 dark:to-slate-800 flex items-center justify-center">
-          <span className="text-6xl">🐟</span>
+          <svg className="w-16 h-16 text-primary-200" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" /></svg>
         </div>
       )}
 
@@ -371,35 +373,52 @@ function FeedCard({ catch: c, showUser = false }: { catch: CatchWithProfile; sho
         {/* Tags row */}
         <div className="flex items-center gap-2 mt-2 flex-wrap">
           {c.water_body && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
-              📍 {c.water_body}
+            <span className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
+              {c.water_body}
             </span>
           )}
           {c.fishing_method && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
-              🎣 {c.fishing_method}
+            <span className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
+              {c.fishing_method}
             </span>
           )}
           {c.weather_condition && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
-              {c.weather_condition} {c.weather_temp_c != null ? `${c.weather_temp_c}°` : ''}
+            <span className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
+              {c.weather_condition}{c.weather_temp_c != null ? ` ${c.weather_temp_c}°` : ''}
             </span>
           )}
           {c.lure_type && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
-              🪝 {c.lure_type}{c.lure_color ? ` (${c.lure_color})` : ''}
+            <span className="inline-flex items-center px-2 py-0.5 bg-slate-100 dark:bg-slate-800 rounded-full text-xs text-slate-600 dark:text-slate-400">
+              {c.lure_type}{c.lure_color ? ` (${c.lure_color})` : ''}
             </span>
           )}
         </div>
 
         {/* Likes */}
         {c.likes_count > 0 && (
-          <div className="mt-2 text-xs text-slate-400">
-            ❤️ {c.likes_count} {c.likes_count === 1 ? 'gilla' : 'gillar'}
+          <div className="mt-2 flex items-center gap-1 text-xs text-slate-400">
+            <svg className="w-3 h-3 fill-slate-400" viewBox="0 0 24 24"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" /></svg>
+            {c.likes_count}
           </div>
         )}
       </div>
     </Link>
+  )
+}
+
+function FishingIcon() {
+  return (
+    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.871c1.355 0 2.697.056 4.024.166C17.155 8.51 18 9.473 18 10.608v2.513M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+    </svg>
+  )
+}
+
+function UsersIcon() {
+  return (
+    <svg className="w-12 h-12" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+    </svg>
   )
 }
 

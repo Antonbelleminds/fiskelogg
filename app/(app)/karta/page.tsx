@@ -242,14 +242,14 @@ export default function KartaPage() {
         const showHeat = heatmapRef.current
         const showFriends = mapFilterRef.current === 'all'
 
-        // Own cluster circles (GREEN)
+        // Own cluster circles (BLACK)
         map.addLayer({
           id: 'clusters',
           type: 'circle',
           source: 'catches',
           filter: ['has', 'point_count'],
           paint: {
-            'circle-color': ['step', ['get', 'point_count'], '#16a34a', 10, '#15803d', 30, '#166534'],
+            'circle-color': ['step', ['get', 'point_count'], '#27272a', 10, '#18181b', 30, '#09090b'],
             'circle-radius': ['step', ['get', 'point_count'], 20, 10, 30, 30, 40],
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
@@ -271,14 +271,14 @@ export default function KartaPage() {
           paint: { 'text-color': '#fff' },
         })
 
-        // Own individual points (GREEN)
+        // Own individual points (BLACK)
         map.addLayer({
           id: 'unclustered-point',
           type: 'circle',
           source: 'catches',
           filter: ['!', ['has', 'point_count']],
           paint: {
-            'circle-color': '#16a34a',
+            'circle-color': '#27272a',
             'circle-radius': 8,
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
@@ -385,7 +385,7 @@ export default function KartaPage() {
                 <div style="font-weight:600">${props.species}</div>
                 ${props.weight_kg ? `<div style="font-size:13px;color:#64748b">${props.weight_kg} kg</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
-                <a href="/fangst/${props.id}" style="display:block;margin-top:6px;font-size:12px;color:#16a34a;text-decoration:none">Visa detaljer &rarr;</a>
+                <a href="/fangst/${props.id}" style="display:block;margin-top:6px;font-size:12px;color:#27272a;text-decoration:none;font-weight:500">Visa detaljer &rarr;</a>
               </div>
             </div>
           `
@@ -399,7 +399,7 @@ export default function KartaPage() {
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
-                <div style="font-size:11px;color:#2563eb;font-weight:500;margin-bottom:2px">&#x1F464; ${props.friend_name}</div>
+                <div style="font-size:11px;color:#64748b;font-weight:500;margin-bottom:2px">${props.friend_name}</div>
                 <div style="font-weight:600">${props.species}</div>
                 ${props.weight_kg ? `<div style="font-size:13px;color:#64748b">${props.weight_kg} kg</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
@@ -544,11 +544,11 @@ export default function KartaPage() {
           onClick={toggleStyle}
           className={`px-3 py-2 rounded-lg text-xs font-medium shadow-md transition ${
             satellite
-              ? 'bg-indigo-600 text-white'
+              ? 'bg-slate-800 text-white'
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
           }`}
         >
-          {satellite ? '🛰️ Satellit' : '🗺️ Karta'}
+          {satellite ? 'Satellit' : 'Karta'}
         </button>
         <button
           onClick={toggleHeatmap}
@@ -564,7 +564,7 @@ export default function KartaPage() {
           onClick={toggleMapFilter}
           className={`px-3 py-2 rounded-lg text-xs font-medium shadow-md transition ${
             mapFilter === 'all'
-              ? 'bg-blue-600 text-white'
+              ? 'bg-slate-800 text-white'
               : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
           }`}
         >
@@ -577,7 +577,7 @@ export default function KartaPage() {
         <div className="absolute bottom-6 right-4 bg-white dark:bg-slate-800 rounded-lg shadow-md px-3 py-2 z-10">
           <div className="flex items-center gap-3 text-xs">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-green-600 inline-block" /> Mina
+              <span className="w-3 h-3 rounded-full bg-slate-800 dark:bg-slate-200 inline-block" /> Mina
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" /> Vänner
@@ -589,7 +589,9 @@ export default function KartaPage() {
       {catches.filter((c) => c.exif_lat).length === 0 && !loading && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 text-center shadow-lg pointer-events-auto">
-            <div className="text-4xl mb-2">🗺️</div>
+            <div className="mb-2 flex justify-center text-slate-300">
+          <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
+        </div>
             <h2 className="font-medium mb-1">Inga fångster på kartan</h2>
             <p className="text-sm text-slate-500">Logga fångster med GPS-position för att se dem här</p>
           </div>

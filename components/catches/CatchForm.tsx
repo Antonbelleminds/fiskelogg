@@ -369,8 +369,8 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
           transition: all 0.15s;
         }
         .input-field:focus {
-          border-color: #0f766e;
-          box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.15);
+          border-color: #27272a;
+          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
         }
         .dark .input-field {
           background: #1e293b;

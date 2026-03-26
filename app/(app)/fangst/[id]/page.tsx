@@ -216,7 +216,7 @@ export default function CatchDetailPage() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">{c.species || 'Okänd art'} 🐟</h1>
+            <h1 className="text-2xl font-semibold">{c.species || 'Okänd art'}</h1>
             {c.profiles && (
               <p className="text-sm text-slate-500">
                 av {c.profiles.display_name || c.profiles.username}
@@ -228,21 +228,26 @@ export default function CatchDetailPage() {
               onClick={toggleLike}
               className={`p-2 rounded-full transition ${liked ? 'text-red-500' : 'text-slate-400 hover:text-red-400'}`}
             >
-              {liked ? '❤️' : '🤍'} {likesCount > 0 && <span className="text-xs">{likesCount}</span>}
+              {liked ? (
+                <svg className="w-5 h-5 fill-red-500" viewBox="0 0 24 24"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 0 1-.383-.218 25.18 25.18 0 0 1-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0 1 12 5.052 5.5 5.5 0 0 1 16.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 0 1-4.244 3.17 15.247 15.247 0 0 1-.383.219l-.022.012-.007.004-.003.001a.752.752 0 0 1-.704 0l-.003-.001Z" /></svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" /></svg>
+              )}
+              {likesCount > 0 && <span className="text-xs ml-0.5">{likesCount}</span>}
             </button>
           </div>
         </div>
 
         {/* Key info */}
         <div className="grid grid-cols-2 gap-3">
-          {c.weight_kg && <InfoBox label="Vikt" value={`${c.weight_kg} kg`} icon="⚖️" />}
-          {c.length_cm && <InfoBox label="Längd" value={`${c.length_cm} cm`} icon="📏" />}
-          <InfoBox label="Datum" value={format(new Date(c.caught_at), 'd MMMM yyyy HH:mm', { locale: sv })} icon="📅" />
-          {c.water_body && <InfoBox label="Vatten" value={c.water_body} icon="💧" />}
-          {c.fishing_method && <InfoBox label="Metod" value={c.fishing_method} icon="🎣" />}
-          {c.lure_type && <InfoBox label="Bete" value={`${c.lure_type}${c.lure_color ? ` (${c.lure_color})` : ''}`} icon="🪝" />}
-          {c.depth_m && <InfoBox label="Djup" value={`${c.depth_m} m`} icon="🌊" />}
-          {c.bottom_structure && <InfoBox label="Botten" value={c.bottom_structure} icon="🪨" />}
+          {c.weight_kg && <InfoBox label="Vikt" value={`${c.weight_kg} kg`} />}
+          {c.length_cm && <InfoBox label="Längd" value={`${c.length_cm} cm`} />}
+          <InfoBox label="Datum" value={format(new Date(c.caught_at), 'd MMMM yyyy HH:mm', { locale: sv })} />
+          {c.water_body && <InfoBox label="Vatten" value={c.water_body} />}
+          {c.fishing_method && <InfoBox label="Metod" value={c.fishing_method} />}
+          {c.lure_type && <InfoBox label="Bete" value={`${c.lure_type}${c.lure_color ? ` (${c.lure_color})` : ''}`} />}
+          {c.depth_m && <InfoBox label="Djup" value={`${c.depth_m} m`} />}
+          {c.bottom_structure && <InfoBox label="Botten" value={c.bottom_structure} />}
         </div>
 
         {/* Weather section */}
@@ -265,10 +270,10 @@ export default function CatchDetailPage() {
           <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-4">
             <h2 className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 mb-2">Astronomi</h2>
             <div className="grid grid-cols-2 gap-2 text-xs text-indigo-700 dark:text-indigo-300">
-              {c.moon_phase && <span>🌙 {c.moon_phase} {c.moon_illumination_pct !== null ? `(${c.moon_illumination_pct}%)` : ''}</span>}
-              {c.sunrise_time && <span>🌅 Uppgång: {c.sunrise_time}</span>}
-              {c.sunset_time && <span>🌇 Nedgång: {c.sunset_time}</span>}
-              {c.is_golden_hour && <span className="text-amber-600 font-medium">✨ Gyllene timmen</span>}
+              {c.moon_phase && <span>{c.moon_phase}{c.moon_illumination_pct !== null ? ` (${c.moon_illumination_pct}%)` : ''}</span>}
+              {c.sunrise_time && <span>Uppgång: {c.sunrise_time}</span>}
+              {c.sunset_time && <span>Nedgång: {c.sunset_time}</span>}
+              {c.is_golden_hour && <span className="text-amber-600 font-medium">Gyllene timmen</span>}
             </div>
           </div>
         )}
@@ -314,10 +319,10 @@ export default function CatchDetailPage() {
   )
 }
 
-function InfoBox({ label, value, icon }: { label: string; value: string; icon: string }) {
+function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
-      <div className="text-xs text-slate-500 mb-0.5">{icon} {label}</div>
+      <div className="text-xs text-slate-500 mb-0.5">{label}</div>
       <div className="text-sm font-medium">{value}</div>
     </div>
   )

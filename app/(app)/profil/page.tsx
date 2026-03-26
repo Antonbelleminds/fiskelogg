@@ -239,7 +239,7 @@ export default function ProfilPage() {
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="Profilbild" className="w-full h-full object-cover" />
             ) : (
-              <span>🎣</span>
+              <svg className="w-8 h-8 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
             )}
             <div className="absolute inset-0 bg-black/30 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
               <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -350,7 +350,7 @@ export default function ProfilPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => acceptFriend(f.id)}
-                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-600 text-white hover:bg-green-700 transition"
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition"
                   >
                     Acceptera
                   </button>
