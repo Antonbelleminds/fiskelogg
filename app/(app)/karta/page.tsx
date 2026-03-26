@@ -31,11 +31,16 @@ export default function KartaPage() {
   const [mapFilter, setMapFilter] = useState<MapFilter>('mine')
   const [satellite, setSatellite] = useState(false)
 
+  // Refs to track current visibility state (needed after style reload)
+  const heatmapRef = useRef(false)
+  const mapFilterRef = useRef<MapFilter>('mine')
+  const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
+  const friendFeaturesRef = useRef<GeoJSON.Feature[]>([])
+
   // Search state
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [filteredIds, setFilteredIds] = useState<string[] | null>(null)
-  const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -138,50 +143,57 @@ export default function KartaPage() {
         'top-right'
       )
 
-      map.on('load', () => {
-        // Own catches features
-        const features = catches
-          .filter((c) => c.exif_lat && c.exif_lng)
-          .map((c) => ({
-            type: 'Feature' as const,
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [c.exif_lng!, c.exif_lat!],
-            },
-            properties: {
-              id: c.id,
-              species: c.species || 'Okand',
-              weight_kg: c.weight_kg || 0,
-              caught_at: c.caught_at,
-              water_body: c.water_body || '',
-            },
-          }))
+      // Build features
+      const features = catches
+        .filter((c) => c.exif_lat && c.exif_lng)
+        .map((c) => ({
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [c.exif_lng!, c.exif_lat!] },
+          properties: {
+            id: c.id,
+            species: c.species || 'Okänd',
+            weight_kg: c.weight_kg || 0,
+            caught_at: c.caught_at,
+            water_body: c.water_body || '',
+          },
+        }))
 
-        allFeaturesRef.current = features
+      const friendFeatures = friendCatches
+        .filter((c) => c.exif_lat && c.exif_lng)
+        .map((c) => ({
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: [c.exif_lng!, c.exif_lat!] },
+          properties: {
+            id: c.id,
+            species: c.species || 'Okänd',
+            weight_kg: c.weight_kg || 0,
+            caught_at: c.caught_at,
+            water_body: c.water_body || '',
+            friend_name: c.profiles?.display_name || c.profiles?.username || 'Vän',
+          },
+        }))
 
-        // Friend catches features
-        const friendFeatures = friendCatches
-          .filter((c) => c.exif_lat && c.exif_lng)
-          .map((c) => ({
-            type: 'Feature' as const,
-            geometry: {
-              type: 'Point' as const,
-              coordinates: [c.exif_lng!, c.exif_lat!],
-            },
-            properties: {
-              id: c.id,
-              species: c.species || 'Okand',
-              weight_kg: c.weight_kg || 0,
-              caught_at: c.caught_at,
-              water_body: c.water_body || '',
-              friend_name: c.profiles?.display_name || c.profiles?.username || 'Van',
-            },
-          }))
+      allFeaturesRef.current = features
+      friendFeaturesRef.current = friendFeatures
+
+      // Extracted function to add all sources and layers
+      function addSourcesAndLayers() {
+        // Remove existing sources/layers if they exist (safety)
+        const layerIds = [
+          'clusters', 'cluster-count', 'unclustered-point',
+          'friend-clusters', 'friend-cluster-count', 'friend-unclustered-point',
+          'catches-heat',
+        ]
+        layerIds.forEach((id) => {
+          if (map.getLayer(id)) map.removeLayer(id)
+        })
+        if (map.getSource('catches')) map.removeSource('catches')
+        if (map.getSource('friend-catches')) map.removeSource('friend-catches')
 
         // Own catches source
         map.addSource('catches', {
           type: 'geojson',
-          data: { type: 'FeatureCollection', features },
+          data: { type: 'FeatureCollection', features: allFeaturesRef.current },
           cluster: true,
           clusterMaxZoom: 14,
           clusterRadius: 50,
@@ -190,11 +202,14 @@ export default function KartaPage() {
         // Friend catches source
         map.addSource('friend-catches', {
           type: 'geojson',
-          data: { type: 'FeatureCollection', features: friendFeatures },
+          data: { type: 'FeatureCollection', features: friendFeaturesRef.current },
           cluster: true,
           clusterMaxZoom: 14,
           clusterRadius: 50,
         })
+
+        const showHeat = heatmapRef.current
+        const showFriends = mapFilterRef.current === 'all'
 
         // Own cluster circles (GREEN)
         map.addLayer({
@@ -208,6 +223,7 @@ export default function KartaPage() {
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
           },
+          layout: { visibility: showHeat ? 'none' : 'visible' },
         })
 
         map.addLayer({
@@ -219,6 +235,7 @@ export default function KartaPage() {
             'text-field': '{point_count_abbreviated}',
             'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
             'text-size': 14,
+            visibility: showHeat ? 'none' : 'visible',
           },
           paint: { 'text-color': '#fff' },
         })
@@ -235,9 +252,10 @@ export default function KartaPage() {
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
           },
+          layout: { visibility: showHeat ? 'none' : 'visible' },
         })
 
-        // Friend cluster circles (BLUE) - hidden by default
+        // Friend cluster circles (BLUE)
         map.addLayer({
           id: 'friend-clusters',
           type: 'circle',
@@ -249,7 +267,7 @@ export default function KartaPage() {
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
           },
-          layout: { visibility: 'none' },
+          layout: { visibility: showFriends ? 'visible' : 'none' },
         })
 
         map.addLayer({
@@ -261,12 +279,12 @@ export default function KartaPage() {
             'text-field': '{point_count_abbreviated}',
             'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
             'text-size': 14,
-            visibility: 'none',
+            visibility: showFriends ? 'visible' : 'none',
           },
           paint: { 'text-color': '#fff' },
         })
 
-        // Friend individual points (BLUE) - hidden by default
+        // Friend individual points (BLUE)
         map.addLayer({
           id: 'friend-unclustered-point',
           type: 'circle',
@@ -278,10 +296,10 @@ export default function KartaPage() {
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
           },
-          layout: { visibility: 'none' },
+          layout: { visibility: showFriends ? 'visible' : 'none' },
         })
 
-        // Heatmap layer (hidden by default)
+        // Heatmap layer
         map.addLayer({
           id: 'catches-heat',
           type: 'heatmap',
@@ -301,7 +319,7 @@ export default function KartaPage() {
               1, 'rgb(239,68,68)',
             ],
           },
-          layout: { visibility: 'none' },
+          layout: { visibility: showHeat ? 'visible' : 'none' },
         })
 
         // Click on own cluster to zoom
@@ -311,10 +329,7 @@ export default function KartaPage() {
           const source = map.getSource('catches') as mapboxgl.GeoJSONSource
           source.getClusterExpansionZoom(clusterId, (err, zoom) => {
             if (err) return
-            map.easeTo({
-              center: (feats[0].geometry as GeoJSON.Point).coordinates as [number, number],
-              zoom: zoom!,
-            })
+            map.easeTo({ center: (feats[0].geometry as GeoJSON.Point).coordinates as [number, number], zoom: zoom! })
           })
         })
 
@@ -325,10 +340,7 @@ export default function KartaPage() {
           const source = map.getSource('friend-catches') as mapboxgl.GeoJSONSource
           source.getClusterExpansionZoom(clusterId, (err, zoom) => {
             if (err) return
-            map.easeTo({
-              center: (feats[0].geometry as GeoJSON.Point).coordinates as [number, number],
-              zoom: zoom!,
-            })
+            map.easeTo({ center: (feats[0].geometry as GeoJSON.Point).coordinates as [number, number], zoom: zoom! })
           })
         })
 
@@ -336,7 +348,6 @@ export default function KartaPage() {
         map.on('click', 'unclustered-point', (e) => {
           const props = e.features![0].properties!
           const coords = (e.features![0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
-
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
@@ -347,7 +358,6 @@ export default function KartaPage() {
               </div>
             </div>
           `
-
           new mapboxgl.Popup({ offset: 15 }).setLngLat(coords).setHTML(html).addTo(map)
         })
 
@@ -355,7 +365,6 @@ export default function KartaPage() {
         map.on('click', 'friend-unclustered-point', (e) => {
           const props = e.features![0].properties!
           const coords = (e.features![0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
-
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
@@ -366,7 +375,6 @@ export default function KartaPage() {
               </div>
             </div>
           `
-
           new mapboxgl.Popup({ offset: 15 }).setLngLat(coords).setHTML(html).addTo(map)
         })
 
@@ -376,6 +384,13 @@ export default function KartaPage() {
           map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
           map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = '' })
         })
+      }
+
+      map.on('load', () => {
+        addSourcesAndLayers()
+
+        // Store addSourcesAndLayers on the map instance for style reloads
+        ;(map as any)._addSourcesAndLayers = addSourcesAndLayers
 
         // Zoom to fit all own catches
         if (features.length > 0) {
@@ -396,6 +411,7 @@ export default function KartaPage() {
     if (!map) return
     const next = !heatmap
     setHeatmap(next)
+    heatmapRef.current = next
     map.setLayoutProperty('catches-heat', 'visibility', next ? 'visible' : 'none')
     map.setLayoutProperty('clusters', 'visibility', next ? 'none' : 'visible')
     map.setLayoutProperty('cluster-count', 'visibility', next ? 'none' : 'visible')
@@ -407,6 +423,7 @@ export default function KartaPage() {
     if (!map) return
     const next = mapFilter === 'mine' ? 'all' : 'mine'
     setMapFilter(next)
+    mapFilterRef.current = next
     const showFriends = next === 'all' ? 'visible' : 'none'
     map.setLayoutProperty('friend-clusters', 'visibility', showFriends)
     map.setLayoutProperty('friend-cluster-count', 'visibility', showFriends)
@@ -418,6 +435,13 @@ export default function KartaPage() {
     if (!map) return
     const next = !satellite
     setSatellite(next)
+
+    // Re-add all sources/layers after style loads
+    map.once('style.load', () => {
+      const addFn = (map as any)._addSourcesAndLayers
+      if (addFn) addFn()
+    })
+
     map.setStyle(
       next
         ? 'mapbox://styles/mapbox/satellite-streets-v12'
@@ -446,7 +470,7 @@ export default function KartaPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Sok t.ex. 'abborrar pa hosten'"
+              placeholder="Sök t.ex. 'abborre på hösten'"
               className="w-full pl-9 pr-3 py-2 rounded-lg bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 shadow-md border border-slate-200 dark:border-slate-700 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             {searching ? (
@@ -454,13 +478,7 @@ export default function KartaPage() {
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-700" />
               </div>
             ) : (
-              <svg
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
+              <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             )}
@@ -470,15 +488,14 @@ export default function KartaPage() {
             disabled={searching || !searchQuery.trim()}
             className="px-3 py-2 rounded-lg bg-primary-700 text-white text-sm font-medium shadow-md disabled:opacity-50 hover:bg-primary-800 transition"
           >
-            Sok
+            Sök
           </button>
         </form>
 
-        {/* Filter indicator */}
         {filteredIds !== null && (
           <div className="mt-2 flex items-center gap-2">
             <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 shadow-md text-xs font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              {shownCount} av {totalWithCoords} fangster
+              {shownCount} av {totalWithCoords} fångster
             </span>
             <button
               onClick={clearSearch}
@@ -532,7 +549,7 @@ export default function KartaPage() {
               <span className="w-3 h-3 rounded-full bg-green-600 inline-block" /> Mina
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" /> Vanner
+              <span className="w-3 h-3 rounded-full bg-blue-600 inline-block" /> Vänner
             </span>
           </div>
         </div>
@@ -541,9 +558,9 @@ export default function KartaPage() {
       {catches.filter((c) => c.exif_lat).length === 0 && !loading && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 text-center shadow-lg pointer-events-auto">
-            <div className="text-4xl mb-2">&#x1F5FA;&#xFE0F;</div>
-            <h2 className="font-medium mb-1">Inga fangster pa kartan</h2>
-            <p className="text-sm text-slate-500">Logga fangster med GPS-position for att se dem har</p>
+            <div className="text-4xl mb-2">🗺️</div>
+            <h2 className="font-medium mb-1">Inga fångster på kartan</h2>
+            <p className="text-sm text-slate-500">Logga fångster med GPS-position för att se dem här</p>
           </div>
         </div>
       )}

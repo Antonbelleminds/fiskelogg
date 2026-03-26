@@ -26,6 +26,9 @@ export default function ProfilPage() {
   const [newTeamName, setNewTeamName] = useState('')
   const [userId, setUserId] = useState<string | null>(null)
   const [codeCopied, setCodyCopied] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [newDisplayName, setNewDisplayName] = useState('')
+  const [savingName, setSavingName] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -76,6 +79,20 @@ export default function ProfilPage() {
     await supabase.auth.signOut()
     router.push('/logga-in')
     router.refresh()
+  }
+
+  async function saveDisplayName() {
+    if (!userId || !newDisplayName.trim()) return
+    setSavingName(true)
+    const { error } = await supabase
+      .from('profiles')
+      .update({ display_name: newDisplayName.trim() })
+      .eq('id', userId)
+    if (!error) {
+      setProfile((prev) => prev ? { ...prev, display_name: newDisplayName.trim() } : null)
+      setEditingName(false)
+    }
+    setSavingName(false)
   }
 
   async function copyFriendCode() {
@@ -211,7 +228,47 @@ export default function ProfilPage() {
         <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-3xl mx-auto mb-3">
           🎣
         </div>
-        <h1 className="text-xl font-semibold">{profile?.display_name || profile?.username}</h1>
+        {editingName ? (
+          <div className="flex items-center justify-center gap-2 mt-1">
+            <input
+              type="text"
+              value={newDisplayName}
+              onChange={(e) => setNewDisplayName(e.target.value)}
+              placeholder="Ditt visningsnamn..."
+              autoFocus
+              className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500 w-44"
+            />
+            <button
+              onClick={saveDisplayName}
+              disabled={savingName || !newDisplayName.trim()}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-700 text-white disabled:opacity-50"
+            >
+              {savingName ? '...' : 'Spara'}
+            </button>
+            <button
+              onClick={() => setEditingName(false)}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+            >
+              Avbryt
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2">
+            <h1 className="text-xl font-semibold">{profile?.display_name || profile?.username}</h1>
+            <button
+              onClick={() => {
+                setNewDisplayName(profile?.display_name || profile?.username || '')
+                setEditingName(true)
+              }}
+              className="text-slate-400 hover:text-slate-600 transition"
+              title="Ändra namn"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" />
+              </svg>
+            </button>
+          </div>
+        )}
         {profile?.bio && <p className="text-sm text-slate-500 mt-1">{profile.bio}</p>}
       </div>
 

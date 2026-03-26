@@ -185,12 +185,22 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
       </div>
 
       {/* Plats */}
-      <FieldGroup label="Plats / Sjönamn">
+      <FieldGroup label="Sjönamn / Vatten">
         <input
           type="text"
           value={form.water_body}
           onChange={(e) => updateForm({ water_body: e.target.value })}
-          placeholder="T.ex. Vättern, Mälaren..."
+          placeholder="T.ex. Vättern, Storån..."
+          className="input-field"
+        />
+      </FieldGroup>
+
+      <FieldGroup label="Region / Län">
+        <input
+          type="text"
+          value={form.location_name}
+          onChange={(e) => updateForm({ location_name: e.target.value })}
+          placeholder="T.ex. Dalarna, Stockholms län..."
           className="input-field"
         />
       </FieldGroup>
@@ -287,22 +297,6 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
           </div>
         </div>
       )}
-
-      {/* Publik toggle */}
-      <div className="flex items-center justify-between py-2">
-        <span className="text-sm font-medium">Visa i socialt flöde</span>
-        <button
-          type="button"
-          onClick={() => updateForm({ is_public: !form.is_public })}
-          className={`relative w-11 h-6 rounded-full transition-colors ${
-            form.is_public ? 'bg-primary-700' : 'bg-slate-300'
-          }`}
-        >
-          <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${
-            form.is_public ? 'translate-x-5' : ''
-          }`} />
-        </button>
-      </div>
 
       {/* Anteckningar */}
       <FieldGroup label="Anteckningar">

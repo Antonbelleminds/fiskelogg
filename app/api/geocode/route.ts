@@ -15,9 +15,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Use Mapbox reverse geocoding
+    // Fetch with all relevant types in one call
     const res = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi,place,locality&language=sv&access_token=${token}`
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi,place,locality,district,region&language=sv&limit=10&access_token=${token}`
     )
 
     if (!res.ok) throw new Error('Geocoding failed')
@@ -26,49 +26,70 @@ export async function GET(req: NextRequest) {
     const features = data.features || []
 
     let waterBody = ''
-    let locationName = ''
+    let region = ''
 
-    // Look for water bodies (lakes, rivers) first
     for (const f of features) {
-      const categories = f.properties?.category || ''
-      const text = f.text || f.place_name || ''
+      const placeTypes: string[] = f.place_type || []
+      const text: string = f.text || ''
+      const categories: string = f.properties?.category || ''
 
-      // Check if it's a water feature
-      if (
-        categories.includes('lake') ||
-        categories.includes('river') ||
-        categories.includes('water') ||
-        text.toLowerCase().includes('sjö') ||
-        text.toLowerCase().includes('å') ||
-        text.toLowerCase().includes('älv') ||
-        text.toLowerCase().includes('viken') ||
-        text.toLowerCase().includes('havet')
-      ) {
-        waterBody = text
-        break
+      // Extract region/county (e.g. "Dalarna", "Stockholms län")
+      if (placeTypes.includes('region') && !region) {
+        region = text
+      }
+
+      // Extract water body from POI features
+      if (placeTypes.includes('poi') && !waterBody) {
+        if (
+          categories.includes('lake') ||
+          categories.includes('river') ||
+          categories.includes('water') ||
+          text.toLowerCase().includes('sjö') ||
+          text.toLowerCase().includes('tjärn') ||
+          text.toLowerCase().includes('träsk') ||
+          text.toLowerCase().includes('älv') ||
+          text.toLowerCase().includes('viken') ||
+          text.toLowerCase().includes('fjärd') ||
+          text.toLowerCase().includes('sund') ||
+          text.toLowerCase().includes('havet')
+        ) {
+          waterBody = text
+        }
       }
     }
 
-    // Get the most specific place name
-    if (features.length > 0) {
-      locationName = features[0].place_name || features[0].text || ''
+    // If no region found in main features, check context of first feature
+    if (!region && features.length > 0) {
+      const context: Array<{ id: string; text: string }> = features[0].context || []
+      for (const c of context) {
+        if (c.id?.startsWith('region')) {
+          region = c.text
+          break
+        }
+      }
     }
 
-    // If no water body found from POI, try a broader search
+    // If still no water body, try a dedicated water-focused POI search
     if (!waterBody) {
-      const waterRes = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi&language=sv&limit=5&access_token=${token}`
+      const poiRes = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=poi&language=sv&limit=10&access_token=${token}`
       )
-      if (waterRes.ok) {
-        const waterData = await waterRes.json()
-        for (const f of (waterData.features || [])) {
-          const text = f.text || ''
+      if (poiRes.ok) {
+        const poiData = await poiRes.json()
+        for (const f of (poiData.features || [])) {
+          const text: string = f.text || ''
+          const categories: string = f.properties?.category || ''
           if (
+            categories.includes('lake') ||
+            categories.includes('river') ||
+            categories.includes('water') ||
             text.toLowerCase().includes('sjö') ||
-            text.toLowerCase().includes('å') ||
+            text.toLowerCase().includes('tjärn') ||
+            text.toLowerCase().includes('träsk') ||
             text.toLowerCase().includes('älv') ||
-            text.toLowerCase().includes('havet') ||
-            text.toLowerCase().includes('viken')
+            text.toLowerCase().includes('viken') ||
+            text.toLowerCase().includes('fjärd') ||
+            text.toLowerCase().includes('sund')
           ) {
             waterBody = text
             break
@@ -79,7 +100,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       water_body: waterBody,
-      location_name: locationName,
+      location_name: region,
     })
   } catch (error) {
     console.error('Geocode error:', error)
