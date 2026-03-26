@@ -141,8 +141,6 @@ export default function AddCatchPage() {
           ai_weather_description: analysis.weather_description || '',
           ai_environment_notes: analysis.environment_notes || '',
           weather_condition: prev.weather_condition || analysis.weather_condition || '',
-          // Auto-fill catcher from person visible in photo
-          catcher_name: prev.catcher_name || (analysis.person_visible ? (analysis.person_description || '') : ''),
         }))
       } else {
         const errBody = await res.json().catch(() => ({}))
@@ -175,21 +173,57 @@ export default function AddCatchPage() {
         }
       }
 
+      const catchBody = {
+        caught_at: data.caught_at || new Date().toISOString(),
+        species: data.species || null,
+        species_confidence: data.species_confidence || null,
+        weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : null,
+        length_cm: data.length_cm ? parseFloat(data.length_cm) : null,
+        depth_m: data.depth_m ? parseFloat(data.depth_m) : null,
+        water_temp_c: data.water_temp_c ? parseFloat(data.water_temp_c as string) : null,
+        lat: data.lat || null,
+        lng: data.lng || null,
+        location_name: data.location_name || null,
+        water_body: data.water_body || null,
+        fishing_method: data.fishing_method || null,
+        lure_type: data.lure_type || null,
+        lure_color: data.lure_color || null,
+        bottom_structure: data.bottom_structure || null,
+        is_public: data.is_public ?? false,
+        notes: data.notes || null,
+        weather_temp_c: data.weather_temp_c ?? null,
+        weather_condition: data.weather_condition || null,
+        wind_speed_ms: data.wind_speed_ms ?? null,
+        wind_direction: data.wind_direction || null,
+        cloud_cover_pct: data.cloud_cover_pct ?? null,
+        precipitation_mm: data.precipitation_mm ?? null,
+        pressure_hpa: data.pressure_hpa ?? null,
+        humidity_pct: data.humidity_pct ?? null,
+        visibility_km: data.visibility_km ?? null,
+        moon_phase: data.moon_phase || null,
+        moon_illumination_pct: data.moon_illumination_pct ?? null,
+        sunrise_time: data.sunrise_time || null,
+        sunset_time: data.sunset_time || null,
+        is_golden_hour: data.is_golden_hour ?? null,
+        ai_weather_description: data.ai_weather_description || null,
+        ai_fish_description: data.ai_fish_description || null,
+        ai_environment_notes: data.ai_environment_notes || null,
+        exif_captured_at: data.exif_captured_at || null,
+        image_url: imageUrl,
+        image_path: imagePath,
+      }
+
       const res = await fetch('/api/catches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...data,
-          weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : null,
-          length_cm: data.length_cm ? parseFloat(data.length_cm) : null,
-          depth_m: data.depth_m ? parseFloat(data.depth_m) : null,
-          water_temp_c: data.water_temp_c ? parseFloat(data.water_temp_c as string) : null,
-          image_url: imageUrl,
-          image_path: imagePath,
-        }),
+        body: JSON.stringify(catchBody),
       })
 
-      if (!res.ok) throw new Error('Save failed')
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        console.error('Save catch failed:', errBody)
+        throw new Error(errBody.error || 'Save failed')
+      }
 
       // Invalidate caches so all tabs show fresh data
       invalidateCache('home-catches', 'stats-catches', 'map-catches')

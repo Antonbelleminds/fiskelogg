@@ -7,7 +7,7 @@ const VALID_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 export async function POST(req: NextRequest) {
   try {
-    const { image, mimeType, profilePhotos } = await req.json()
+    const { image, mimeType } = await req.json()
 
     if (!image) {
       return NextResponse.json({ error: 'Ingen bild skickad' }, { status: 400 })
@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
               type: 'text',
               text: `Du är en expert på sportfiske och fiskidentifiering. Analysera denna bild noggrant och returnera ENDAST ett JSON-objekt utan markdown-formatering.
 
+VIKTIGT: Ignorera helt eventuella personer på bilden. Beskriv ALDRIG personer. Fokusera ENBART på fisken, vädret och miljön.
+
 Returnera:
 {
   "species": "Artens svenska namn (t.ex. Gädda, Abborre, Öring) eller null om ingen fisk syns",
@@ -48,9 +50,7 @@ Returnera:
   "weather_condition": "Klart|Delvis molnigt|Mulet|Regn|Dimma",
   "environment_notes": "Miljö: hav, sjö, å, brygga, båt, is etc.",
   "season_guess": "Vår|Sommar|Höst|Vinter|Okänt",
-  "water_type": "Saltvatten|Sötvatten|Bräckt vatten|Okänt",
-  "person_visible": true/false,
-  "person_description": "Kort beskrivning av personen som håller fisken (kläder, hår etc.) eller null"
+  "water_type": "Saltvatten|Sötvatten|Bräckt vatten|Okänt"
 }
 
 Svara BARA med JSON, ingen annan text.`,

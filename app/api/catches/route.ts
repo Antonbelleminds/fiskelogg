@@ -187,8 +187,11 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Create catch error:', error)
-      return NextResponse.json({ error: 'Kunde inte spara fångst' }, { status: 500 })
+      console.error('Create catch error:', JSON.stringify(error, null, 2))
+      return NextResponse.json(
+        { error: `Kunde inte spara fångst: ${error.message || error.code || 'okänt fel'}`, details: error },
+        { status: 500 }
+      )
     }
 
     // Update total_catches count
