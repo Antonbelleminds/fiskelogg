@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import type { CatchWithProfile } from '@/types/database'
+import { getCache, setCache } from '@/lib/cache'
 
 type Tab = 'mine' | 'friends'
 
@@ -33,12 +34,22 @@ export default function HomePage() {
         setUsername(user.email?.split('@')[0] || 'Fiskare')
       }
 
+      // Use cache to avoid re-fetching on tab switch
+      const cached = getCache<CatchWithProfile[]>('home-catches')
+      if (cached) {
+        setMyCatches(cached)
+        setHasMore(cached.length >= PAGE_SIZE)
+        setLoading(false)
+        return
+      }
+
       const res = await fetch(`/api/catches?limit=${PAGE_SIZE}`)
       if (res.ok) {
         const d = await res.json()
         const arr = Array.isArray(d) ? d : []
         setMyCatches(arr)
         setHasMore(arr.length >= PAGE_SIZE)
+        setCache('home-catches', arr)
       }
 
       setLoading(false)
@@ -48,12 +59,20 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab === 'friends' && !friendsLoaded && !friendsLoading) {
+      const cached = getCache<CatchWithProfile[]>('friend-catches')
+      if (cached) {
+        setFriendCatches(cached)
+        setFriendsLoaded(true)
+        return
+      }
       setFriendsLoading(true)
       fetch('/api/catches?scope=friends&limit=100')
         .then((r) => r.json())
         .then((d) => {
-          setFriendCatches(Array.isArray(d) ? d : [])
+          const arr = Array.isArray(d) ? d : []
+          setFriendCatches(arr)
           setFriendsLoaded(true)
+          setCache('friend-catches', arr)
         })
         .catch(() => {})
         .finally(() => setFriendsLoading(false))

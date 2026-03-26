@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { extractExif } from '@/lib/exif'
 import CatchForm, { getDefaultFormData, type CatchFormData } from '@/components/catches/CatchForm'
 import type { ImageAnalysis } from '@/types/database'
+import { invalidateCache } from '@/lib/cache'
 
 export default function AddCatchPage() {
   const router = useRouter()
@@ -179,6 +180,9 @@ export default function AddCatchPage() {
       })
 
       if (!res.ok) throw new Error('Save failed')
+
+      // Invalidate caches so all tabs show fresh data
+      invalidateCache('home-catches', 'stats-catches', 'map-catches')
 
       router.push('/')
       router.refresh()

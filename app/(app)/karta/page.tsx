@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { getCache, setCache } from '@/lib/cache'
 
 interface MapCatch {
   id: string
@@ -27,6 +28,8 @@ export default function KartaPage() {
   const [catches, setCatches] = useState<MapCatch[]>([])
   const [friendCatches, setFriendCatches] = useState<MapCatch[]>([])
   const [loading, setLoading] = useState(true)
+  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [friendsLoaded, setFriendsLoaded] = useState(false)
   const [heatmap, setHeatmap] = useState(false)
   const [mapFilter, setMapFilter] = useState<MapFilter>('mine')
   const [satellite, setSatellite] = useState(false)
@@ -42,18 +45,46 @@ export default function KartaPage() {
   const [searching, setSearching] = useState(false)
   const [filteredIds, setFilteredIds] = useState<string[] | null>(null)
 
+  // Load own catches on mount (cached)
   useEffect(() => {
-    Promise.all([
-      fetch('/api/catches/map').then((r) => r.json()),
-      fetch('/api/catches?scope=friends&limit=500').then((r) => r.json()),
-    ])
-      .then(([myData, friendData]) => {
-        setCatches(Array.isArray(myData) ? myData : [])
-        setFriendCatches(Array.isArray(friendData) ? friendData : [])
-        setLoading(false)
+    const cached = getCache<MapCatch[]>('map-catches')
+    if (cached) {
+      setCatches(cached)
+      setLoading(false)
+      return
+    }
+    fetch('/api/catches/map')
+      .then((r) => r.json())
+      .then((data) => {
+        const arr = Array.isArray(data) ? data : []
+        setCatches(arr)
+        setCache('map-catches', arr)
       })
-      .catch(() => setLoading(false))
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
+
+  // Lazy-load friend catches only when "Alla" filter is selected
+  useEffect(() => {
+    if (mapFilter !== 'all' || friendsLoaded || friendsLoading) return
+    const cached = getCache<MapCatch[]>('map-friend-catches')
+    if (cached) {
+      setFriendCatches(cached)
+      setFriendsLoaded(true)
+      return
+    }
+    setFriendsLoading(true)
+    fetch('/api/catches?scope=friends&limit=500')
+      .then((r) => r.json())
+      .then((data) => {
+        const arr = Array.isArray(data) ? data : []
+        setFriendCatches(arr)
+        setFriendsLoaded(true)
+        setCache('map-friend-catches', arr)
+      })
+      .catch(() => {})
+      .finally(() => setFriendsLoading(false))
+  }, [mapFilter, friendsLoaded, friendsLoading])
 
   const updateMapFilter = useCallback((ids: string[] | null) => {
     const map = mapRef.current

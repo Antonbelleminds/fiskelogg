@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import ChatWidget from '@/components/stats/ChatWidget'
+import { getCache, setCache } from '@/lib/cache'
 
 interface Catch {
   id: string
@@ -38,11 +39,18 @@ export default function StatsPage() {
 
   useEffect(() => {
     async function fetchCatches() {
+      const cached = getCache<Catch[]>('stats-catches')
+      if (cached) {
+        setCatches(cached)
+        setLoading(false)
+        return
+      }
       try {
         const res = await fetch('/api/catches?limit=500')
         if (res.ok) {
           const data = await res.json()
           setCatches(data)
+          setCache('stats-catches', data)
         }
       } catch {
         // silently fail
