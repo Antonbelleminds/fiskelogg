@@ -1,18 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAnthropicClient } from '@/lib/anthropic'
 
+const VALID_MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
 export async function POST(req: NextRequest) {
   try {
-    const { image, mimeType } = await req.json()
+    const { image, mimeType, profilePhotos } = await req.json()
 
     if (!image) {
       return NextResponse.json({ error: 'Ingen bild skickad' }, { status: 400 })
     }
 
+    const mediaType = VALID_MEDIA_TYPES.includes(mimeType) ? mimeType : 'image/jpeg'
+
     const anthropic = createAnthropicClient()
 
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-20250514',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 1024,
       messages: [
         {
@@ -22,7 +26,7 @@ export async function POST(req: NextRequest) {
               type: 'image',
               source: {
                 type: 'base64',
-                media_type: mimeType || 'image/jpeg',
+                media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
                 data: image,
               },
             },
@@ -42,7 +46,9 @@ Returnera:
   "weather_condition": "Klart|Delvis molnigt|Mulet|Regn|Dimma",
   "environment_notes": "Miljö: hav, sjö, å, brygga, båt, is etc.",
   "season_guess": "Vår|Sommar|Höst|Vinter|Okänt",
-  "water_type": "Saltvatten|Sötvatten|Bräckt vatten|Okänt"
+  "water_type": "Saltvatten|Sötvatten|Bräckt vatten|Okänt",
+  "person_visible": true/false,
+  "person_description": "Kort beskrivning av personen som håller fisken (kläder, hår etc.) eller null"
 }
 
 Svara BARA med JSON, ingen annan text.`,
@@ -63,10 +69,16 @@ Svara BARA med JSON, ingen annan text.`,
       jsonStr = jsonStr.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
     }
 
-    const analysis = JSON.parse(jsonStr)
-    return NextResponse.json(analysis)
+    try {
+      const analysis = JSON.parse(jsonStr)
+      return NextResponse.json(analysis)
+    } catch (parseError) {
+      console.error('JSON parse error. Raw response:', jsonStr)
+      return NextResponse.json({ error: 'Kunde inte tolka AI-svaret' }, { status: 500 })
+    }
   } catch (error) {
     console.error('AI analysis error:', error)
-    return NextResponse.json({ error: 'Bildanalys misslyckades' }, { status: 500 })
+    const message = error instanceof Error ? error.message : 'Okänt fel'
+    return NextResponse.json({ error: `Bildanalys misslyckades: ${message}` }, { status: 500 })
   }
 }

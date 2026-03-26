@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
+import CatchForm, { type CatchFormData } from '@/components/catches/CatchForm'
 import type { CatchWithProfile } from '@/types/database'
 
 export default function CatchDetailPage() {
@@ -14,6 +15,10 @@ export default function CatchDetailPage() {
   const [loading, setLoading] = useState(true)
   const [liked, setLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -24,9 +29,9 @@ export default function CatchDetailPage() {
         setCatchData(data)
         setLikesCount(data.likes_count || 0)
 
-        // Check if user has liked
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
+          setCurrentUserId(user.id)
           const { data: likeData } = await supabase
             .from('catch_likes')
             .select('id')
@@ -40,6 +45,8 @@ export default function CatchDetailPage() {
     }
     load()
   }, [id, supabase])
+
+  const isOwner = currentUserId && catchData?.user_id === currentUserId
 
   async function toggleLike() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -65,6 +72,77 @@ export default function CatchDetailPage() {
     }
   }
 
+  async function handleSave(data: CatchFormData) {
+    setSaving(true)
+    setEditError('')
+
+    try {
+      const res = await fetch(`/api/catches/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : null,
+          length_cm: data.length_cm ? parseFloat(data.length_cm) : null,
+          depth_m: data.depth_m ? parseFloat(data.depth_m) : null,
+          water_temp_c: data.water_temp_c ? parseFloat(data.water_temp_c as string) : null,
+        }),
+      })
+
+      if (!res.ok) throw new Error('Save failed')
+
+      const updated = await res.json()
+      setCatchData((prev) => prev ? { ...prev, ...updated } : prev)
+      setEditing(false)
+    } catch {
+      setEditError('Kunde inte spara ändringar. Försök igen.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function catchToFormData(c: CatchWithProfile): CatchFormData {
+    return {
+      catcher_name: (c as unknown as Record<string, unknown>).catcher_name as string || '',
+      catcher_user_id: (c as unknown as Record<string, unknown>).catcher_user_id as string || null,
+      caught_at: new Date(c.caught_at).toISOString().slice(0, 16),
+      species: c.species || '',
+      species_confidence: c.species_confidence || 0,
+      weight_kg: c.weight_kg?.toString() || '',
+      length_cm: c.length_cm?.toString() || '',
+      lat: c.exif_lat || null,
+      lng: c.exif_lng || null,
+      location_name: c.location_name || '',
+      water_body: c.water_body || '',
+      fishing_method: c.fishing_method || '',
+      lure_type: c.lure_type || '',
+      lure_color: c.lure_color || '',
+      depth_m: c.depth_m?.toString() || '',
+      bottom_structure: c.bottom_structure || '',
+      water_temp_c: c.water_temp_c?.toString() || '',
+      is_public: c.is_public || false,
+      notes: c.notes || '',
+      weather_temp_c: c.weather_temp_c,
+      weather_condition: c.weather_condition || '',
+      wind_speed_ms: c.wind_speed_ms,
+      wind_direction: c.wind_direction || '',
+      cloud_cover_pct: c.cloud_cover_pct,
+      precipitation_mm: c.precipitation_mm,
+      pressure_hpa: c.pressure_hpa,
+      humidity_pct: c.humidity_pct,
+      visibility_km: c.visibility_km,
+      moon_phase: c.moon_phase || '',
+      moon_illumination_pct: c.moon_illumination_pct,
+      sunrise_time: c.sunrise_time || '',
+      sunset_time: c.sunset_time || '',
+      is_golden_hour: c.is_golden_hour,
+      ai_weather_description: c.ai_weather_description || '',
+      ai_fish_description: c.ai_fish_description || '',
+      ai_environment_notes: c.ai_environment_notes || '',
+      exif_captured_at: c.exif_captured_at || null,
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -86,6 +164,35 @@ export default function CatchDetailPage() {
 
   const c = catchData
 
+  // Edit mode
+  if (editing) {
+    return (
+      <div className="max-w-lg mx-auto pb-8">
+        <div className="px-4 pt-4 mb-4">
+          <h1 className="text-xl font-semibold">Redigera fångst</h1>
+        </div>
+
+        {c.image_url && (
+          <div className="aspect-[4/3] overflow-hidden mb-4">
+            <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" />
+          </div>
+        )}
+
+        <div className="px-4">
+          <CatchForm
+            initialData={catchToFormData(c)}
+            onSave={handleSave}
+            saving={saving}
+            error={editError}
+            submitLabel="Spara ändringar"
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // View mode
   return (
     <div className="max-w-lg mx-auto pb-8">
       {/* Back button */}
@@ -185,13 +292,23 @@ export default function CatchDetailPage() {
           </div>
         )}
 
-        {/* Delete button (only owner) */}
-        <button
-          onClick={handleDelete}
-          className="w-full py-2.5 text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 transition mt-4"
-        >
-          Ta bort fångst
-        </button>
+        {/* Owner actions */}
+        {isOwner && (
+          <div className="flex gap-3 mt-4">
+            <button
+              onClick={() => setEditing(true)}
+              className="flex-1 py-2.5 text-primary-700 text-sm font-medium rounded-xl border border-primary-200 hover:bg-primary-50 transition"
+            >
+              Redigera
+            </button>
+            <button
+              onClick={handleDelete}
+              className="flex-1 py-2.5 text-red-600 text-sm font-medium rounded-xl hover:bg-red-50 transition"
+            >
+              Ta bort
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

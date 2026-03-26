@@ -17,16 +17,63 @@ export async function GET(req: NextRequest) {
     const method = searchParams.get('method')
     const sort = searchParams.get('sort') || 'caught_at'
     const publicOnly = searchParams.get('public') === 'true'
+    const scope = searchParams.get('scope') || 'mine'
+    const teamId = searchParams.get('team_id')
 
     const admin = createAdminClient()
+
+    // Determine which user IDs to fetch catches for
+    let targetUserIds: string[] = [user.id]
+    // Map of friendId -> share_location boolean (only relevant for scope=friends)
+    let friendShareLocationMap: Map<string, boolean> = new Map()
+
+    if (scope === 'friends') {
+      const { data: friendships } = await admin
+        .from('friendships')
+        .select('*')
+        .eq('status', 'accepted')
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+
+      const friendIds = (friendships || []).map((f) => {
+        const friendId = f.requester_id === user.id ? f.addressee_id : f.requester_id
+        friendShareLocationMap.set(friendId, f.share_location)
+        return friendId
+      })
+
+      if (friendIds.length === 0) {
+        return NextResponse.json([])
+      }
+      targetUserIds = friendIds
+    } else if (scope === 'team' && teamId) {
+      // Verify user is member of the team
+      const { data: membership } = await admin
+        .from('team_members')
+        .select('user_id')
+        .eq('team_id', teamId)
+
+      if (!membership || membership.length === 0) {
+        return NextResponse.json([])
+      }
+
+      const isMember = membership.some((m) => m.user_id === user.id)
+      if (!isMember) {
+        return NextResponse.json({ error: 'Inte medlem i laget' }, { status: 403 })
+      }
+
+      targetUserIds = membership.map((m) => m.user_id)
+    }
+
     let query = admin
       .from('catches')
       .select('*, profiles!catches_user_id_profiles_fkey(username, display_name, avatar_url)')
 
     if (publicOnly) {
       query = query.eq('is_public', true)
-    } else {
+    } else if (scope === 'mine') {
       query = query.eq('user_id', user.id)
+    } else {
+      // friends or team scope
+      query = query.in('user_id', targetUserIds)
     }
 
     if (species) query = query.eq('species', species)
@@ -49,7 +96,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Kunde inte hämta fångster' }, { status: 500 })
     }
 
-    return NextResponse.json(data || [])
+    // If scope=friends, strip location data for friends with share_location=false
+    let result = data || []
+    if (scope === 'friends') {
+      result = result.map((c) => {
+        const shareLocation = friendShareLocationMap.get(c.user_id)
+        if (shareLocation === false) {
+          return {
+            ...c,
+            exif_lat: null,
+            exif_lng: null,
+            location: null,
+            location_name: null,
+            water_body: null,
+          }
+        }
+        return c
+      })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error('Catches error:', error)
     return NextResponse.json({ error: 'Serverfel' }, { status: 500 })

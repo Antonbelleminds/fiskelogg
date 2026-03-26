@@ -4,6 +4,7 @@ export interface Profile {
   display_name: string | null
   avatar_url: string | null
   bio: string | null
+  friend_code: string | null
   total_catches: number
   created_at: string
 }
@@ -63,6 +64,41 @@ export interface CatchLike {
 
 export interface CatchWithProfile extends Catch {
   profiles: Pick<Profile, 'username' | 'display_name' | 'avatar_url'> | null
+}
+
+export interface Friendship {
+  id: string
+  requester_id: string
+  addressee_id: string
+  status: 'pending' | 'accepted' | 'blocked'
+  share_location: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Team {
+  id: string
+  name: string
+  created_by: string
+  created_at: string
+}
+
+export interface TeamMember {
+  id: string
+  team_id: string
+  user_id: string
+  role: 'admin' | 'member'
+  joined_at: string
+}
+
+export interface FriendWithProfile extends Friendship {
+  friend_profile: {
+    id: string
+    username: string
+    display_name: string | null
+    avatar_url: string | null
+    friend_code: string | null
+  }
 }
 
 export interface ImageAnalysis {

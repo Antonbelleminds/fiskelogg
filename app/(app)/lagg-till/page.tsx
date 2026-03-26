@@ -3,17 +3,8 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { extractExif } from '@/lib/exif'
+import CatchForm, { getDefaultFormData, type CatchFormData } from '@/components/catches/CatchForm'
 import type { ImageAnalysis } from '@/types/database'
-
-const SPECIES_OPTIONS = [
-  'Abborre', 'Gädda', 'Gös', 'Öring', 'Lax', 'Regnbåge', 'Röding', 'Harr',
-  'Sik', 'Lake', 'Ål', 'Braxen', 'Mört', 'Karp', 'Torsk', 'Makrill',
-  'Havsöring', 'Flundra', 'Rödspätta', 'Sej', 'Annat'
-]
-
-const METHOD_OPTIONS = ['Kastfiske', 'Trolling', 'Mete', 'Flugfiske', 'Isfiske', 'Pilkfiske', 'Jiggning', 'Annat']
-const LURE_OPTIONS = ['Wobbler', 'Jig', 'Skeddrag', 'Spinner', 'Fluga', 'Mask', 'Räka', 'Annat']
-const BOTTOM_OPTIONS = ['Sand', 'Grus', 'Sten', 'Lera', 'Vegetation', 'Okänd']
 
 export default function AddCatchPage() {
   const router = useRouter()
@@ -24,50 +15,8 @@ export default function AddCatchPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-
-  // Form data
-  const [form, setForm] = useState({
-    caught_at: new Date().toISOString().slice(0, 16),
-    species: '',
-    species_confidence: 0,
-    weight_kg: '',
-    length_cm: '',
-    lat: null as number | null,
-    lng: null as number | null,
-    location_name: '',
-    water_body: '',
-    fishing_method: '',
-    lure_type: '',
-    lure_color: '',
-    depth_m: '',
-    bottom_structure: '',
-    water_temp_c: '',
-    is_public: false,
-    notes: '',
-    // Auto-filled
-    weather_temp_c: null as number | null,
-    weather_condition: '',
-    wind_speed_ms: null as number | null,
-    wind_direction: '',
-    cloud_cover_pct: null as number | null,
-    precipitation_mm: null as number | null,
-    pressure_hpa: null as number | null,
-    humidity_pct: null as number | null,
-    visibility_km: null as number | null,
-    moon_phase: '',
-    moon_illumination_pct: null as number | null,
-    sunrise_time: '',
-    sunset_time: '',
-    is_golden_hour: null as boolean | null,
-    ai_weather_description: '',
-    ai_fish_description: '',
-    ai_environment_notes: '',
-    exif_captured_at: null as string | null,
-  })
-
-  function updateForm(updates: Partial<typeof form>) {
-    setForm(prev => ({ ...prev, ...updates }))
-  }
+  const [formData, setFormData] = useState<CatchFormData>(getDefaultFormData())
+  const [analysisError, setAnalysisError] = useState('')
 
   async function handleImageSelect(file: File) {
     setImageFile(file)
@@ -75,11 +24,13 @@ export default function AddCatchPage() {
     setImagePreview(url)
     setAnalyzing(true)
     setError('')
+    setAnalysisError('')
+
+    const updates: Partial<CatchFormData> = {}
 
     try {
       // Extract EXIF
       const exif = await extractExif(file)
-      const updates: Partial<typeof form> = {}
 
       if (exif.captured_at) {
         const d = new Date(exif.captured_at)
@@ -102,8 +53,6 @@ export default function AddCatchPage() {
         } catch {}
       }
 
-      updateForm(updates)
-
       // AI analysis
       const base64 = await fileToBase64(file)
       const mimeType = file.type || 'image/jpeg'
@@ -116,55 +65,91 @@ export default function AddCatchPage() {
 
       if (analysisRes.ok) {
         const analysis: ImageAnalysis = await analysisRes.json()
-        updateForm({
-          ...updates,
-          species: analysis.species || '',
-          species_confidence: analysis.species_confidence || 0,
-          ai_fish_description: analysis.fish_description || '',
-          ai_weather_description: analysis.weather_description || '',
-          ai_environment_notes: analysis.environment_notes || '',
-          weather_condition: analysis.weather_condition || '',
-        })
+        updates.species = analysis.species || ''
+        updates.species_confidence = analysis.species_confidence || 0
+        updates.ai_fish_description = analysis.fish_description || ''
+        updates.ai_weather_description = analysis.weather_description || ''
+        updates.ai_environment_notes = analysis.environment_notes || ''
+        updates.weather_condition = analysis.weather_condition || ''
+      } else {
+        const errBody = await analysisRes.json().catch(() => ({}))
+        console.error('AI analysis failed:', errBody)
+        setAnalysisError('AI-analysen misslyckades. Du kan fylla i art manuellt.')
       }
 
       // Fetch weather, moon, sun data in parallel
       const dateParam = updates.exif_captured_at || new Date().toISOString()
-      const lat = updates.lat || form.lat
-      const lng = updates.lng || form.lng
+      const lat = updates.lat || formData.lat
+      const lng = updates.lng || formData.lng
 
       if (lat && lng) {
-        const [weatherRes, moonRes, sunRes] = await Promise.allSettled([
+        const [weatherRes, moonRes, sunRes, geocodeRes] = await Promise.allSettled([
           fetch(`/api/weather?lat=${lat}&lng=${lng}&date=${dateParam}`),
           fetch(`/api/moon?date=${dateParam}`),
           fetch(`/api/sun?lat=${lat}&lng=${lng}&date=${dateParam}`),
+          fetch(`/api/geocode?lat=${lat}&lng=${lng}`),
         ])
-
-        const weatherUpdates: Partial<typeof form> = {}
 
         if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
           const w = await weatherRes.value.json()
-          Object.assign(weatherUpdates, w)
+          Object.assign(updates, w)
         }
         if (moonRes.status === 'fulfilled' && moonRes.value.ok) {
           const m = await moonRes.value.json()
-          Object.assign(weatherUpdates, m)
+          Object.assign(updates, m)
         }
         if (sunRes.status === 'fulfilled' && sunRes.value.ok) {
           const s = await sunRes.value.json()
-          Object.assign(weatherUpdates, s)
+          Object.assign(updates, s)
         }
-
-        updateForm(weatherUpdates)
+        if (geocodeRes.status === 'fulfilled' && geocodeRes.value.ok) {
+          const g = await geocodeRes.value.json()
+          if (g.water_body && !updates.water_body) updates.water_body = g.water_body
+          if (g.location_name && !updates.location_name) updates.location_name = g.location_name
+        }
       }
     } catch (err) {
       console.error('Analysis error:', err)
     } finally {
+      setFormData(prev => ({ ...prev, ...updates }))
       setAnalyzing(false)
       setStep('form')
     }
   }
 
-  async function handleSave() {
+  async function handleRetryAnalysis() {
+    if (!imageFile) return
+    setAnalysisError('')
+    setAnalyzing(true)
+    try {
+      const base64 = await fileToBase64(imageFile)
+      const mimeType = imageFile.type || 'image/jpeg'
+      const res = await fetch('/api/analyze-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64, mimeType }),
+      })
+      if (res.ok) {
+        const analysis: ImageAnalysis = await res.json()
+        setFormData(prev => ({
+          ...prev,
+          species: analysis.species || prev.species,
+          species_confidence: analysis.species_confidence || 0,
+          ai_fish_description: analysis.fish_description || '',
+          ai_weather_description: analysis.weather_description || '',
+          ai_environment_notes: analysis.environment_notes || '',
+        }))
+      } else {
+        setAnalysisError('AI-analysen misslyckades igen.')
+      }
+    } catch {
+      setAnalysisError('Kunde inte nå AI-tjänsten.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  async function handleSave(data: CatchFormData) {
     setSaving(true)
     setError('')
 
@@ -173,9 +158,9 @@ export default function AddCatchPage() {
       let imagePath = null
 
       if (imageFile) {
-        const formData = new FormData()
-        formData.append('file', imageFile)
-        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+        const fd = new FormData()
+        fd.append('file', imageFile)
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd })
         if (uploadRes.ok) {
           const upload = await uploadRes.json()
           imageUrl = upload.url
@@ -187,11 +172,11 @@ export default function AddCatchPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
-          weight_kg: form.weight_kg ? parseFloat(form.weight_kg) : null,
-          length_cm: form.length_cm ? parseFloat(form.length_cm) : null,
-          depth_m: form.depth_m ? parseFloat(form.depth_m) : null,
-          water_temp_c: form.water_temp_c ? parseFloat(form.water_temp_c) : null,
+          ...data,
+          weight_kg: data.weight_kg ? parseFloat(data.weight_kg) : null,
+          length_cm: data.length_cm ? parseFloat(data.length_cm) : null,
+          depth_m: data.depth_m ? parseFloat(data.depth_m) : null,
+          water_temp_c: data.water_temp_c ? parseFloat(data.water_temp_c as string) : null,
           image_url: imageUrl,
           image_path: imagePath,
         }),
@@ -209,9 +194,8 @@ export default function AddCatchPage() {
   }
 
   function skipImage() {
-    // Try geolocation
     navigator.geolocation.getCurrentPosition(
-      (pos) => updateForm({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (pos) => setFormData(prev => ({ ...prev, lat: pos.coords.latitude, lng: pos.coords.longitude })),
       () => {}
     )
     setStep('form')
@@ -283,9 +267,12 @@ export default function AddCatchPage() {
         </div>
       )}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">
-          {error}
+      {analysisError && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl text-sm mb-4 flex items-center justify-between">
+          <span>{analysisError}</span>
+          <button onClick={handleRetryAnalysis} className="text-amber-800 font-medium underline ml-2 shrink-0">
+            Försök igen
+          </button>
         </div>
       )}
 
@@ -295,229 +282,13 @@ export default function AddCatchPage() {
         </div>
       )}
 
-      {form.ai_fish_description && (
-        <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-3 mb-4 text-sm">
-          <span className="font-medium">AI-analys:</span> {form.ai_fish_description}
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {/* Datum/tid */}
-        <FieldGroup label="Datum & tid">
-          <input
-            type="datetime-local"
-            value={form.caught_at}
-            onChange={(e) => updateForm({ caught_at: e.target.value })}
-            className="input-field"
-          />
-        </FieldGroup>
-
-        {/* Art */}
-        <FieldGroup label={`Art ${form.species_confidence > 0 ? `(AI: ${Math.round(form.species_confidence * 100)}% säker)` : ''}`}>
-          <select
-            value={form.species}
-            onChange={(e) => updateForm({ species: e.target.value })}
-            className="input-field"
-          >
-            <option value="">Välj art...</option>
-            {SPECIES_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </FieldGroup>
-
-        {/* Vikt & Längd */}
-        <div className="grid grid-cols-2 gap-3">
-          <FieldGroup label="Vikt (kg)">
-            <input
-              type="number"
-              step="0.01"
-              value={form.weight_kg}
-              onChange={(e) => updateForm({ weight_kg: e.target.value })}
-              placeholder="0.00"
-              className="input-field"
-            />
-          </FieldGroup>
-          <FieldGroup label="Längd (cm)">
-            <input
-              type="number"
-              step="1"
-              value={form.length_cm}
-              onChange={(e) => updateForm({ length_cm: e.target.value })}
-              placeholder="0"
-              className="input-field"
-            />
-          </FieldGroup>
-        </div>
-
-        {/* Plats */}
-        <FieldGroup label="Plats / Sjönamn">
-          <input
-            type="text"
-            value={form.water_body}
-            onChange={(e) => updateForm({ water_body: e.target.value })}
-            placeholder="T.ex. Vättern, Mälaren..."
-            className="input-field"
-          />
-        </FieldGroup>
-
-        {form.lat && form.lng && (
-          <div className="text-xs text-slate-500">
-            GPS: {form.lat.toFixed(5)}, {form.lng.toFixed(5)}
-          </div>
-        )}
-
-        {/* Metod */}
-        <FieldGroup label="Fiskemetod">
-          <select
-            value={form.fishing_method}
-            onChange={(e) => updateForm({ fishing_method: e.target.value })}
-            className="input-field"
-          >
-            <option value="">Välj metod...</option>
-            {METHOD_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </FieldGroup>
-
-        {/* Bete */}
-        <div className="grid grid-cols-2 gap-3">
-          <FieldGroup label="Betetyp">
-            <select
-              value={form.lure_type}
-              onChange={(e) => updateForm({ lure_type: e.target.value })}
-              className="input-field"
-            >
-              <option value="">Välj...</option>
-              {LURE_OPTIONS.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </FieldGroup>
-          <FieldGroup label="Betefärg">
-            <input
-              type="text"
-              value={form.lure_color}
-              onChange={(e) => updateForm({ lure_color: e.target.value })}
-              placeholder="T.ex. Silver"
-              className="input-field"
-            />
-          </FieldGroup>
-        </div>
-
-        {/* Djup & Botten */}
-        <div className="grid grid-cols-2 gap-3">
-          <FieldGroup label="Djup (m)">
-            <input
-              type="number"
-              step="0.5"
-              value={form.depth_m}
-              onChange={(e) => updateForm({ depth_m: e.target.value })}
-              placeholder="0"
-              className="input-field"
-            />
-          </FieldGroup>
-          <FieldGroup label="Botten">
-            <select
-              value={form.bottom_structure}
-              onChange={(e) => updateForm({ bottom_structure: e.target.value })}
-              className="input-field"
-            >
-              <option value="">Välj...</option>
-              {BOTTOM_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </FieldGroup>
-        </div>
-
-        {/* Vattentemperatur */}
-        <FieldGroup label="Vattentemperatur (°C)">
-          <input
-            type="number"
-            step="0.5"
-            value={form.water_temp_c}
-            onChange={(e) => updateForm({ water_temp_c: e.target.value })}
-            placeholder="0"
-            className="input-field"
-          />
-        </FieldGroup>
-
-        {/* Väderinfo (auto) */}
-        {form.weather_condition && (
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 space-y-1">
-            <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">Väder (automatiskt)</h3>
-            <div className="text-xs text-blue-700 dark:text-blue-300 grid grid-cols-2 gap-1">
-              {form.weather_temp_c !== null && <span>Temp: {form.weather_temp_c}°C</span>}
-              <span>Väder: {form.weather_condition}</span>
-              {form.wind_speed_ms !== null && <span>Vind: {form.wind_speed_ms} m/s {form.wind_direction}</span>}
-              {form.moon_phase && <span>Måne: {form.moon_phase}</span>}
-              {form.sunrise_time && <span>Soluppgång: {form.sunrise_time}</span>}
-              {form.sunset_time && <span>Solnedgång: {form.sunset_time}</span>}
-              {form.is_golden_hour && <span className="text-amber-600 font-medium">Gyllene timmen!</span>}
-            </div>
-          </div>
-        )}
-
-        {/* Publik toggle */}
-        <div className="flex items-center justify-between py-2">
-          <span className="text-sm font-medium">Visa i socialt flöde</span>
-          <button
-            type="button"
-            onClick={() => updateForm({ is_public: !form.is_public })}
-            className={`relative w-11 h-6 rounded-full transition-colors ${
-              form.is_public ? 'bg-primary-700' : 'bg-slate-300'
-            }`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow ${
-              form.is_public ? 'translate-x-5' : ''
-            }`} />
-          </button>
-        </div>
-
-        {/* Anteckningar */}
-        <FieldGroup label="Anteckningar">
-          <textarea
-            value={form.notes}
-            onChange={(e) => updateForm({ notes: e.target.value })}
-            placeholder="Fritext..."
-            rows={3}
-            className="input-field resize-none"
-          />
-        </FieldGroup>
-
-        <button
-          onClick={handleSave}
-          disabled={saving || analyzing}
-          className="w-full py-3.5 px-4 rounded-xl bg-primary-700 text-white font-medium hover:bg-primary-800 disabled:opacity-50 transition mt-2"
-        >
-          {saving ? 'Sparar...' : 'Spara fångst'}
-        </button>
-      </div>
-
-      <style jsx global>{`
-        .input-field {
-          width: 100%;
-          padding: 0.625rem 0.875rem;
-          border-radius: 0.75rem;
-          border: 1px solid #e2e8f0;
-          background: white;
-          font-size: 0.875rem;
-          outline: none;
-          transition: all 0.15s;
-        }
-        .input-field:focus {
-          border-color: #0f766e;
-          box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.15);
-        }
-        .dark .input-field {
-          background: #1e293b;
-          border-color: #334155;
-          color: #f8fafc;
-        }
-      `}</style>
-    </div>
-  )
-}
-
-function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{label}</label>
-      {children}
+      <CatchForm
+        initialData={formData}
+        onSave={handleSave}
+        saving={saving}
+        error={error}
+        submitLabel="Spara fångst"
+      />
     </div>
   )
 }
