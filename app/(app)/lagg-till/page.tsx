@@ -153,8 +153,9 @@ export default function AddCatchPage() {
       let imagePath = null
 
       if (imageFile) {
+        const compressed = await compressForUpload(imageFile)
         const fd = new FormData()
-        fd.append('file', imageFile)
+        fd.append('file', compressed, 'photo.jpg')
         const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd })
         if (uploadRes.ok) {
           const upload = await uploadRes.json()
@@ -351,6 +352,29 @@ function SparkleIcon() {
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
     </svg>
   )
+}
+
+async function compressForUpload(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 1920
+      let { width, height } = img
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round((height * MAX) / width); width = MAX }
+        else { width = Math.round((width * MAX) / height); height = MAX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+      URL.revokeObjectURL(objectUrl)
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Compression failed')), 'image/jpeg', 0.85)
+    }
+    img.onerror = reject
+    img.src = objectUrl
+  })
 }
 
 // Resize + compress image before sending to AI (phone cameras produce huge files that timeout Vercel)
