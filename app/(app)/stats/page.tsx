@@ -240,17 +240,14 @@ export default function StatsPage() {
             </div>
           ))}
         </div>
-        {drillDown['species'] && (
-          <DrillDownList>
-            {speciesBreakdown.map(([species, count]) => (
-              <DrillDownItem key={species} label={species} count={count}>
-                {catches
-                  .filter((c) => (c.species || 'Okänd') === species)
-                  .map((c) => <CatchRow key={c.id} c={c} />)}
-              </DrillDownItem>
-            ))}
-          </DrillDownList>
-        )}
+        {drillDown['species'] && speciesBreakdown.map(([species]) => (
+          <ConditionAnalysis
+            key={species}
+            catches={catches.filter((c) => (c.species || 'Okänd') === species)}
+            allCatches={catches}
+            label={species}
+          />
+        ))}
       </Section>
 
       {/* Species filter for analysis sections */}
@@ -304,17 +301,28 @@ export default function StatsPage() {
         <div className="flex justify-between mt-1 text-[9px] text-slate-400">
           <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
         </div>
-        {drillDown['time'] && (
-          <DrillDownList>
-            {catchesByHour.map((count, h) =>
-              count > 0 ? (
-                <DrillDownItem key={h} label={`${h.toString().padStart(2, '0')}:00`} count={count}>
-                  {getCatchesForHour(h).map((c) => <CatchRow key={c.id} c={c} />)}
-                </DrillDownItem>
-              ) : null
-            )}
-          </DrillDownList>
-        )}
+        {drillDown['time'] && (() => {
+          // Group into time blocks for analysis
+          const blocks = [
+            { label: 'Natt (00–05)', hours: [0,1,2,3,4,5] },
+            { label: 'Morgon (06–09)', hours: [6,7,8,9] },
+            { label: 'Förmiddag (10–12)', hours: [10,11,12] },
+            { label: 'Eftermiddag (13–16)', hours: [13,14,15,16] },
+            { label: 'Kväll (17–20)', hours: [17,18,19,20] },
+            { label: 'Sen kväll (21–23)', hours: [21,22,23] },
+          ]
+          const blockCatches = blocks.map(b => ({
+            ...b,
+            catches: filteredCatches.filter(c => c.caught_at && b.hours.includes(new Date(c.caught_at).getHours())),
+          })).filter(b => b.catches.length > 0)
+
+          return blockCatches.map(b => (
+            <div key={b.label}>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mt-3 mb-0">{b.label} — {b.catches.length} fångster</p>
+              <ConditionAnalysis catches={b.catches} allCatches={filteredCatches} label={b.label} />
+            </div>
+          ))
+        })()}
       </Section>
 
       {/* Weather correlation */}
@@ -337,17 +345,14 @@ export default function StatsPage() {
               </div>
             ))}
           </div>
-          {drillDown['weather'] && (
-            <DrillDownList>
-              {weatherBreakdown.map(([condition, count]) => (
-                <DrillDownItem key={condition} label={condition} count={count}>
-                  {getCatchesForField('weather_condition', condition).map((c) => (
-                    <CatchRow key={c.id} c={c} />
-                  ))}
-                </DrillDownItem>
-              ))}
-            </DrillDownList>
-          )}
+          {drillDown['weather'] && weatherBreakdown.map(([condition]) => (
+            <ConditionAnalysis
+              key={condition}
+              catches={getCatchesForField('weather_condition', condition)}
+              allCatches={filteredCatches}
+              label={condition}
+            />
+          ))}
         </Section>
       )}
 
@@ -371,17 +376,14 @@ export default function StatsPage() {
               </div>
             ))}
           </div>
-          {drillDown['moon'] && (
-            <DrillDownList>
-              {moonBreakdown.map(([phase, count]) => (
-                <DrillDownItem key={phase} label={phase} count={count}>
-                  {getCatchesForField('moon_phase', phase).map((c) => (
-                    <CatchRow key={c.id} c={c} />
-                  ))}
-                </DrillDownItem>
-              ))}
-            </DrillDownList>
-          )}
+          {drillDown['moon'] && moonBreakdown.map(([phase]) => (
+            <ConditionAnalysis
+              key={phase}
+              catches={getCatchesForField('moon_phase', phase)}
+              allCatches={filteredCatches}
+              label={phase}
+            />
+          ))}
         </Section>
       )}
 
@@ -410,17 +412,14 @@ export default function StatsPage() {
               </div>
             ))}
           </div>
-          {drillDown['pressure'] && (
-            <DrillDownList>
-              {pressureBreakdown.map(([bucket, count]) => (
-                <DrillDownItem key={bucket} label={bucket} count={count}>
-                  {getCatchesForPressure(bucket).map((c) => (
-                    <CatchRow key={c.id} c={c} />
-                  ))}
-                </DrillDownItem>
-              ))}
-            </DrillDownList>
-          )}
+          {drillDown['pressure'] && pressureBreakdown.map(([bucket]) => (
+            <ConditionAnalysis
+              key={bucket}
+              catches={getCatchesForPressure(bucket)}
+              allCatches={filteredCatches}
+              label={bucket}
+            />
+          ))}
         </Section>
       )}
 
@@ -452,17 +451,14 @@ export default function StatsPage() {
               </div>
             ))}
           </div>
-          {drillDown['location'] && (
-            <DrillDownList>
-              {topLocations.map(([name, count]) => (
-                <DrillDownItem key={name} label={name} count={count}>
-                  {catches
-                    .filter((c) => c.water_body === name)
-                    .map((c) => <CatchRow key={c.id} c={c} />)}
-                </DrillDownItem>
-              ))}
-            </DrillDownList>
-          )}
+          {drillDown['location'] && topLocations.map(([name]) => (
+            <ConditionAnalysis
+              key={name}
+              catches={catches.filter((c) => c.water_body === name)}
+              allCatches={catches}
+              label={name}
+            />
+          ))}
         </Section>
       )}
 
@@ -504,7 +500,7 @@ function Section({ title, icon, bgClass, isOpen, onToggle, children }: {
         {icon}
         <h2 className="text-sm font-semibold dark:text-white flex-1">{title}</h2>
         <span className="text-[10px] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition">
-          {isOpen ? 'Dölj detaljer' : 'Visa fångster'}
+          {isOpen ? 'Dölj analys' : 'Analysera'}
         </span>
         <svg
           className={`w-4 h-4 text-slate-400 transform transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -518,45 +514,131 @@ function Section({ title, icon, bgClass, isOpen, onToggle, children }: {
   )
 }
 
-function DrillDownList({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 space-y-2">
-      {children}
-    </div>
-  )
-}
-
-function DrillDownItem({ label, count, children }: {
-  label: string; count: number; children: React.ReactNode
+function ConditionAnalysis({ catches: subset, allCatches, label }: {
+  catches: Catch[]
+  allCatches: Catch[]
+  label: string
 }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div>
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between text-xs py-1 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition"
-      >
-        <span>{label}</span>
-        <span className="text-slate-400">{count} st</span>
-      </button>
-      {open && <div className="ml-2 mt-1 space-y-1">{children}</div>}
-    </div>
-  )
-}
+  if (subset.length === 0) return null
 
-function CatchRow({ c }: { c: Catch }) {
+  // Species breakdown with counts & avg weight
+  const speciesMap: Record<string, { count: number; totalWeight: number; weights: number[] }> = {}
+  subset.forEach((c) => {
+    const sp = c.species || 'Okänd'
+    if (!speciesMap[sp]) speciesMap[sp] = { count: 0, totalWeight: 0, weights: [] }
+    speciesMap[sp].count++
+    if (c.weight_kg) {
+      speciesMap[sp].totalWeight += c.weight_kg
+      speciesMap[sp].weights.push(c.weight_kg)
+    }
+  })
+  const speciesSorted = Object.entries(speciesMap).sort((a, b) => b[1].count - a[1].count)
+
+  // Average weight for this condition vs overall
+  const weightsHere = subset.filter((c) => c.weight_kg).map((c) => c.weight_kg!)
+  const avgWeightHere = weightsHere.length > 0 ? weightsHere.reduce((a, b) => a + b, 0) / weightsHere.length : null
+  const allWeights = allCatches.filter((c) => c.weight_kg).map((c) => c.weight_kg!)
+  const avgWeightAll = allWeights.length > 0 ? allWeights.reduce((a, b) => a + b, 0) / allWeights.length : null
+
+  // Heaviest catch in this condition
+  const heaviest = subset.reduce<Catch | null>((best, c) =>
+    c.weight_kg && c.weight_kg > (best?.weight_kg || 0) ? c : best, null
+  )
+
+  // Best lure
+  const lureCounts: Record<string, number> = {}
+  subset.forEach((c) => { if (c.lure_type) lureCounts[c.lure_type] = (lureCounts[c.lure_type] || 0) + 1 })
+  const bestLure = Object.entries(lureCounts).sort((a, b) => b[1] - a[1])[0]
+
+  // Best method
+  const methodCounts: Record<string, number> = {}
+  subset.forEach((c) => { if (c.fishing_method) methodCounts[c.fishing_method] = (methodCounts[c.fishing_method] || 0) + 1 })
+  const bestMethod = Object.entries(methodCounts).sort((a, b) => b[1] - a[1])[0]
+
+  // Top water
+  const waterCounts: Record<string, number> = {}
+  subset.forEach((c) => { if (c.water_body) waterCounts[c.water_body] = (waterCounts[c.water_body] || 0) + 1 })
+  const topWater = Object.entries(waterCounts).sort((a, b) => b[1] - a[1])[0]
+
   return (
-    <a
-      href={`/fangst/${c.id}`}
-      className="flex items-center justify-between px-2 py-1.5 text-xs bg-white dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700 hover:border-primary-300 dark:hover:border-primary-600 transition"
-    >
-      <span className="dark:text-slate-200">
-        {c.species || 'Okänd'}{c.weight_kg ? ` - ${c.weight_kg} kg` : ''}
-      </span>
-      <span className="text-slate-400">
-        {c.caught_at ? new Date(c.caught_at).toLocaleDateString('sv-SE') : ''}
-      </span>
-    </a>
+    <div className="mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 space-y-3">
+      {/* Species breakdown */}
+      <div>
+        <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">Artfördelning</p>
+        <div className="flex flex-wrap gap-1.5">
+          {speciesSorted.map(([sp, data]) => (
+            <span key={sp} className="inline-flex items-center gap-1 px-2 py-1 bg-white dark:bg-slate-800 rounded-md text-xs border border-slate-100 dark:border-slate-700">
+              <span className="font-medium dark:text-slate-200">{sp}</span>
+              <span className="text-slate-400">{data.count}</span>
+              {data.weights.length > 0 && (
+                <span className="text-slate-400 text-[10px]">
+                  ({(data.totalWeight / data.weights.length).toFixed(1)} kg snitt)
+                </span>
+              )}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Weight comparison */}
+      {avgWeightHere !== null && avgWeightAll !== null && (
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-white dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700">
+          <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0 0 12 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52 2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 0 1-2.031.352 5.988 5.988 0 0 1-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.971Zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0 2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 0 1-2.031.352 5.989 5.989 0 0 1-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.971Z" />
+          </svg>
+          <span className="text-xs dark:text-slate-300">
+            Medelvikt: <strong className={avgWeightHere >= avgWeightAll ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-300'}>
+              {avgWeightHere.toFixed(1)} kg
+            </strong>
+            <span className="text-slate-400"> vs {avgWeightAll.toFixed(1)} kg totalt</span>
+            {avgWeightHere > avgWeightAll * 1.1 && (
+              <span className="ml-1 text-emerald-600 dark:text-emerald-400 text-[10px]">+{Math.round(((avgWeightHere - avgWeightAll) / avgWeightAll) * 100)}%</span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Best catch */}
+      {heaviest && heaviest.weight_kg && (
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-white dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700">
+          <svg className="w-3.5 h-3.5 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 0 1 3 3h-15a3 3 0 0 1 3-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 0 1-.982-3.172M9.497 14.25a7.454 7.454 0 0 0 .982-3.172M12 3.75a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm0 0v3.803" />
+          </svg>
+          <a href={`/fangst/${heaviest.id}`} className="text-xs dark:text-slate-300 hover:underline">
+            Tyngsta: <strong>{heaviest.species}</strong> {heaviest.weight_kg} kg
+            {heaviest.length_cm ? ` (${heaviest.length_cm} cm)` : ''}
+            <span className="text-slate-400 ml-1">
+              {heaviest.caught_at ? new Date(heaviest.caught_at).toLocaleDateString('sv-SE') : ''}
+            </span>
+          </a>
+        </div>
+      )}
+
+      {/* Best lure + method */}
+      <div className="flex flex-wrap gap-2">
+        {bestLure && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700 text-xs">
+            <span className="text-slate-400">Bete:</span>
+            <span className="font-medium dark:text-slate-200">{bestLure[0]}</span>
+            <span className="text-slate-400">({bestLure[1]})</span>
+          </div>
+        )}
+        {bestMethod && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700 text-xs">
+            <span className="text-slate-400">Metod:</span>
+            <span className="font-medium dark:text-slate-200">{bestMethod[0]}</span>
+            <span className="text-slate-400">({bestMethod[1]})</span>
+          </div>
+        )}
+        {topWater && (
+          <div className="flex items-center gap-1.5 px-2 py-1 bg-white dark:bg-slate-800 rounded-md border border-slate-100 dark:border-slate-700 text-xs">
+            <span className="text-slate-400">Plats:</span>
+            <span className="font-medium dark:text-slate-200">{topWater[0]}</span>
+            <span className="text-slate-400">({topWater[1]})</span>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 
