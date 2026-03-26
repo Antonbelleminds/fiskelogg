@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 
 export const SPECIES_OPTIONS = [
   'Abborre', 'Gädda', 'Gös', 'Öring', 'Lax', 'Regnbåge', 'Röding', 'Harr',
@@ -161,12 +161,11 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
 
       {/* Fångstperson */}
       <FieldGroup label="Fångstperson">
-        <input
-          type="text"
+        <AutocompleteInput
           value={form.catcher_name}
-          onChange={(e) => updateForm({ catcher_name: e.target.value })}
+          onChange={(val) => updateForm({ catcher_name: val })}
           placeholder="Ditt namn (standard: du)"
-          className="input-field"
+          field="catcher_name"
         />
         {form.catcher_user_id && form.catcher_name && (
           <div className="text-xs text-primary-600 mt-1">Matchad med profil</div>
@@ -282,12 +281,11 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
       </div>
 
       <FieldGroup label="Bete (fritext)">
-        <input
-          type="text"
+        <AutocompleteInput
           value={form.lure_name}
-          onChange={(e) => updateForm({ lure_name: e.target.value })}
+          onChange={(val) => updateForm({ lure_name: val })}
           placeholder="T.ex. Toby 18g, Rapala X-Rap 10cm..."
-          className="input-field"
+          field="lure_name"
         />
       </FieldGroup>
 
@@ -402,6 +400,119 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
     <div>
       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">{label}</label>
       {children}
+    </div>
+  )
+}
+
+function AutocompleteInput({ value, onChange, placeholder, field }: {
+  value: string
+  onChange: (val: string) => void
+  placeholder: string
+  field: string
+}) {
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [filtered, setFiltered] = useState<string[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [highlightIndex, setHighlightIndex] = useState(-1)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch suggestions once on mount
+  useEffect(() => {
+    fetch(`/api/autocomplete?field=${field}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setSuggestions(data))
+      .catch(() => {})
+  }, [field])
+
+  // Filter as user types
+  const handleChange = useCallback((text: string) => {
+    onChange(text)
+    if (text.length > 0 && suggestions.length > 0) {
+      const lower = text.toLowerCase()
+      const matches = suggestions.filter(s =>
+        s.toLowerCase().includes(lower) && s.toLowerCase() !== lower
+      )
+      setFiltered(matches)
+      setShowDropdown(matches.length > 0)
+      setHighlightIndex(-1)
+    } else {
+      setShowDropdown(false)
+    }
+  }, [onChange, suggestions])
+
+  const selectSuggestion = useCallback((s: string) => {
+    onChange(s)
+    setShowDropdown(false)
+    setHighlightIndex(-1)
+    inputRef.current?.blur()
+  }, [onChange])
+
+  // Handle keyboard navigation
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (!showDropdown) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightIndex(prev => Math.min(prev + 1, filtered.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightIndex(prev => Math.max(prev - 1, 0))
+    } else if (e.key === 'Enter' && highlightIndex >= 0) {
+      e.preventDefault()
+      selectSuggestion(filtered[highlightIndex])
+    } else if (e.key === 'Escape') {
+      setShowDropdown(false)
+    }
+  }, [showDropdown, highlightIndex, filtered, selectSuggestion])
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        onFocus={() => {
+          if (value.length > 0 && filtered.length > 0) setShowDropdown(true)
+          else if (value.length === 0 && suggestions.length > 0) {
+            setFiltered(suggestions.slice(0, 8))
+            setShowDropdown(true)
+          }
+        }}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        className="input-field"
+        autoComplete="off"
+      />
+      {showDropdown && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto">
+          {filtered.slice(0, 8).map((s, i) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); selectSuggestion(s) }}
+              className={`w-full text-left px-3 py-2 text-sm transition ${
+                i === highlightIndex
+                  ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white'
+                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
