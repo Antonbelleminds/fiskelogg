@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { format } from 'date-fns'
@@ -97,6 +97,40 @@ export default function HomePage() {
     }
   }
 
+  const rawCatches = activeTab === 'mine' ? myCatches : friendCatches
+  const activeCatches = useMemo(() => rawCatches.filter((c) => {
+    if (filterSpecies && c.species !== filterSpecies) return false
+    if (filterMethod && c.fishing_method !== filterMethod) return false
+    return true
+  }), [rawCatches, filterSpecies, filterMethod])
+
+  const { totalCatches, heaviest, speciesCount, bestHour, bestLure, bestWater } = useMemo(() => {
+    const total = myCatches.length
+    const heavy = myCatches.reduce((max, c) =>
+      c.weight_kg && c.weight_kg > (max?.weight_kg || 0) ? c : max, myCatches[0]
+    )
+    const species = new Set(myCatches.filter((c) => c.species).map((c) => c.species)).size
+
+    const hourCounts: Record<number, number> = {}
+    const lureCounts: Record<string, number> = {}
+    const waterCounts: Record<string, number> = {}
+    myCatches.forEach((c) => {
+      if (c.lure_type) lureCounts[c.lure_type] = (lureCounts[c.lure_type] || 0) + 1
+      const hour = new Date(c.caught_at).getHours()
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1
+      if (c.water_body) waterCounts[c.water_body] = (waterCounts[c.water_body] || 0) + 1
+    })
+
+    return {
+      totalCatches: total,
+      heaviest: heavy,
+      speciesCount: species,
+      bestHour: Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0],
+      bestLure: Object.entries(lureCounts).sort((a, b) => b[1] - a[1])[0],
+      bestWater: Object.entries(waterCounts).sort((a, b) => b[1] - a[1])[0],
+    }
+  }, [myCatches])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -104,32 +138,6 @@ export default function HomePage() {
       </div>
     )
   }
-
-  const rawCatches = activeTab === 'mine' ? myCatches : friendCatches
-  const activeCatches = rawCatches.filter((c) => {
-    if (filterSpecies && c.species !== filterSpecies) return false
-    if (filterMethod && c.fishing_method !== filterMethod) return false
-    return true
-  })
-  const totalCatches = myCatches.length
-  const heaviest = myCatches.reduce((max, c) =>
-    c.weight_kg && c.weight_kg > (max?.weight_kg || 0) ? c : max, myCatches[0]
-  )
-  const speciesCount = new Set(myCatches.filter((c) => c.species).map((c) => c.species)).size
-
-  // Insights
-  const hourCounts: Record<number, number> = {}
-  const lureCounts: Record<string, number> = {}
-  const waterCounts: Record<string, number> = {}
-  myCatches.forEach((c) => {
-    if (c.lure_type) lureCounts[c.lure_type] = (lureCounts[c.lure_type] || 0) + 1
-    const hour = new Date(c.caught_at).getHours()
-    hourCounts[hour] = (hourCounts[hour] || 0) + 1
-    if (c.water_body) waterCounts[c.water_body] = (waterCounts[c.water_body] || 0) + 1
-  })
-  const bestHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0]
-  const bestLure = Object.entries(lureCounts).sort((a, b) => b[1] - a[1])[0]
-  const bestWater = Object.entries(waterCounts).sort((a, b) => b[1] - a[1])[0]
 
   return (
     <div className="max-w-lg mx-auto">

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { getCache, setCache } from '@/lib/cache'
 import type { Profile, FriendWithProfile } from '@/types/database'
 
 interface TeamWithMeta {
@@ -50,24 +51,41 @@ export default function ProfilPage() {
 
   useEffect(() => {
     async function load() {
+      // Try cache first for instant display
+      const cachedProfile = getCache<{ profile: Profile; friends: FriendWithProfile[]; teams: TeamWithMeta[]; userId: string }>('profile-data')
+      if (cachedProfile) {
+        setProfile(cachedProfile.profile)
+        setFriends(cachedProfile.friends)
+        setTeams(cachedProfile.teams)
+        setUserId(cachedProfile.userId)
+        setLoading(false)
+      }
+
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
       setUserId(user.id)
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      const [profileRes, friendsRes, teamsRes] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', user.id).single(),
+        fetch('/api/friends').then(r => r.ok ? r.json() : []),
+        fetch('/api/teams').then(r => r.ok ? r.json() : []),
+      ])
 
-      if (profileData) setProfile(profileData)
-
-      await loadFriends()
-      await loadTeams()
+      if (profileRes.data) setProfile(profileRes.data)
+      setFriends(friendsRes)
+      setTeams(teamsRes)
       setLoading(false)
+
+      // Cache for next visit
+      setCache('profile-data', {
+        profile: profileRes.data,
+        friends: friendsRes,
+        teams: teamsRes,
+        userId: user.id,
+      })
     }
     load()
-  }, [supabase, loadFriends, loadTeams])
+  }, [supabase])
 
   async function handleLogout() {
     await supabase.auth.signOut()
