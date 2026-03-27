@@ -22,6 +22,8 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<Tab>('mine')
   const [filterSpecies, setFilterSpecies] = useState('')
   const [filterMethod, setFilterMethod] = useState('')
+  const [filterCatcher, setFilterCatcher] = useState('')
+  const [filterYear, setFilterYear] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const pageRef = useRef(0)
   const PAGE_SIZE = 10
@@ -101,8 +103,10 @@ export default function HomePage() {
   const activeCatches = useMemo(() => rawCatches.filter((c) => {
     if (filterSpecies && c.species !== filterSpecies) return false
     if (filterMethod && c.fishing_method !== filterMethod) return false
+    if (filterCatcher && c.catcher_name !== filterCatcher) return false
+    if (filterYear && new Date(c.caught_at).getFullYear().toString() !== filterYear) return false
     return true
-  }), [rawCatches, filterSpecies, filterMethod])
+  }), [rawCatches, filterSpecies, filterMethod, filterCatcher, filterYear])
 
   const { totalCatches, heaviest, speciesCount, bestHour, bestLure, bestWater } = useMemo(() => {
     const total = myCatches.length
@@ -183,9 +187,9 @@ export default function HomePage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
             </svg>
             Filtrera
-            {(filterSpecies || filterMethod) && (
+            {(filterSpecies || filterMethod || filterCatcher || filterYear) && (
               <span className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary-700 text-white text-[10px]">
-                {[filterSpecies, filterMethod].filter(Boolean).length}
+                {[filterSpecies, filterMethod, filterCatcher, filterYear].filter(Boolean).length}
               </span>
             )}
           </button>
@@ -214,9 +218,31 @@ export default function HomePage() {
                 ))}
               </select>
 
-              {(filterSpecies || filterMethod) && (
+              <select
+                value={filterCatcher}
+                onChange={(e) => setFilterCatcher(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none"
+              >
+                <option value="">Alla fångstpersoner</option>
+                {Array.from(new Set(myCatches.filter(c => c.catcher_name).map(c => c.catcher_name!))).sort().map(n => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+
+              <select
+                value={filterYear}
+                onChange={(e) => setFilterYear(e.target.value)}
+                className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none"
+              >
+                <option value="">Alla år</option>
+                {Array.from(new Set(myCatches.map(c => new Date(c.caught_at).getFullYear().toString()))).sort((a, b) => b.localeCompare(a)).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+
+              {(filterSpecies || filterMethod || filterCatcher || filterYear) && (
                 <button
-                  onClick={() => { setFilterSpecies(''); setFilterMethod('') }}
+                  onClick={() => { setFilterSpecies(''); setFilterMethod(''); setFilterCatcher(''); setFilterYear('') }}
                   className="text-xs px-2 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 border border-red-200 dark:border-red-800"
                 >
                   Rensa

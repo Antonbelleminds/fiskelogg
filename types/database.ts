@@ -46,6 +46,7 @@ export interface Catch {
   ai_weather_description: string | null
   ai_fish_description: string | null
   ai_environment_notes: string | null
+  catcher_name: string | null
   image_url: string | null
   image_path: string | null
   exif_captured_at: string | null

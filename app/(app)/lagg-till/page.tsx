@@ -263,7 +263,7 @@ export default function AddCatchPage() {
           }}
         />
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           <button
             onClick={() => {
               if (fileInputRef.current) {
@@ -271,7 +271,7 @@ export default function AddCatchPage() {
                 fileInputRef.current.click()
               }
             }}
-            className="w-full py-4 px-6 bg-primary-700 text-white rounded-2xl font-medium flex items-center justify-center gap-3 hover:bg-primary-800 active:scale-[0.98] transition"
+            className="w-full py-8 px-6 bg-primary-700 text-white rounded-2xl font-semibold text-lg flex items-center justify-center gap-3 hover:bg-primary-800 active:scale-[0.98] transition"
           >
             <CameraIcon />
             Ta foto
@@ -284,18 +284,20 @@ export default function AddCatchPage() {
                 fileInputRef.current.click()
               }
             }}
-            className="w-full py-4 px-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-medium flex items-center justify-center gap-3 hover:bg-slate-50 active:scale-[0.98] transition"
+            className="w-full py-8 px-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-semibold text-lg flex items-center justify-center gap-3 hover:bg-slate-50 active:scale-[0.98] transition"
           >
             <GalleryIcon />
             Välj från album
           </button>
 
-          <button
-            onClick={skipImage}
-            className="w-full py-4 px-6 text-slate-500 rounded-2xl font-medium hover:bg-slate-100 active:scale-[0.98] transition"
-          >
-            Skippa bild
-          </button>
+          <div className="pt-4">
+            <button
+              onClick={skipImage}
+              className="w-full py-4 px-6 text-slate-500 rounded-2xl font-medium border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition"
+            >
+              Skippa bild
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -380,7 +382,7 @@ export default function AddCatchPage() {
 
 function CameraIcon() {
   return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
     </svg>
@@ -389,7 +391,7 @@ function CameraIcon() {
 
 function GalleryIcon() {
   return (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
     </svg>
   )

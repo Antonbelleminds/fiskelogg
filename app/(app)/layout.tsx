@@ -20,7 +20,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 safe-area-bottom z-50">
+      <nav className="fixed bottom-2 left-2 right-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl safe-area-bottom z-50 shadow-lg">
         <div className="flex items-center justify-around max-w-lg mx-auto h-16">
           {navItems.map((item) => {
             const isActive = item.href === '/'
