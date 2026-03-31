@@ -21,15 +21,17 @@ interface DayHistory {
   precipitation_sum: number | null
   cloud_cover_avg: number | null
   wind_speed_max_ms: number | null
+  wind_direction: string | null
   condition: string
 }
 
 interface WeatherData {
   current: CurrentWeather
   history: DayHistory[]
+  forecast: DayHistory[]
 }
 
-const WEEKDAYS = ['Son', 'Mon', 'Tis', 'Ons', 'Tor', 'Fre', 'Lor']
+const WEEKDAYS = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör']
 
 function formatDay(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -40,6 +42,10 @@ function formatDay(dateStr: string): string {
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)
   if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Igår'
+
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (dateStr === tomorrow.toISOString().slice(0, 10)) return 'Imorgon'
 
   return `${WEEKDAYS[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`
 }
@@ -60,20 +66,44 @@ function overallTrend(history: DayHistory[]): { text: string; color: string } {
   const last = pressures[pressures.length - 1]
   const diff = last - first
 
-  if (diff > 4) return { text: 'Stigande tryck \u2014 bra f\u00f6r fiske', color: 'text-green-600' }
+  if (diff > 4) return { text: 'Stigande tryck — bra för fiske', color: 'text-green-600' }
   if (diff < -4) return { text: 'Fallande tryck', color: 'text-red-500' }
-  return { text: 'Stabilt tryck \u2014 bra f\u00f6r fiske', color: 'text-green-600' }
+  return { text: 'Stabilt tryck — bra för fiske', color: 'text-green-600' }
 }
 
 function conditionIcon(condition: string): string {
   switch (condition) {
-    case 'Klart': return '\u2600'
+    case 'Klart': return '\u2600\uFE0F'
     case 'Delvis molnigt': return '\u26C5'
-    case 'Molnigt': return '\u2601'
-    case 'Mulet': return '\u2601'
-    case 'Regn': return '\uD83C\uDF27'
-    default: return '\u2601'
+    case 'Molnigt': return '\u2601\uFE0F'
+    case 'Mulet': return '\u2601\uFE0F'
+    case 'Regn': return '\uD83C\uDF27\uFE0F'
+    default: return '\u2601\uFE0F'
   }
+}
+
+// Convert short direction codes to readable Swedish
+function directionLabel(dir: string | null): string {
+  if (!dir) return ''
+  const map: Record<string, string> = {
+    'N': 'Nordlig',
+    'NNO': 'Nord-nordöstlig',
+    'NO': 'Nordöstlig',
+    'ONO': 'Öst-nordöstlig',
+    'O': 'Östlig',
+    'OSO': 'Öst-sydöstlig',
+    'SO': 'Sydöstlig',
+    'SSO': 'Syd-sydöstlig',
+    'S': 'Sydlig',
+    'SSV': 'Syd-sydvästlig',
+    'SV': 'Sydvästlig',
+    'VSV': 'Väst-sydvästlig',
+    'V': 'Västlig',
+    'VNV': 'Väst-nordvästlig',
+    'NV': 'Nordvästlig',
+    'NNV': 'Nord-nordvästlig',
+  }
+  return map[dir] || dir
 }
 
 export default function VaderPage() {
@@ -89,11 +119,11 @@ export default function VaderPage() {
     setError('')
     try {
       const res = await fetch(`/api/weather-forecast?lat=${lat}&lng=${lng}`)
-      if (!res.ok) throw new Error('Kunde inte h\u00e4mta v\u00e4der')
+      if (!res.ok) throw new Error('Kunde inte hämta väder')
       const data: WeatherData = await res.json()
       setWeather(data)
     } catch {
-      setError('Kunde inte h\u00e4mta v\u00e4derdata. F\u00f6rs\u00f6k igen.')
+      setError('Kunde inte hämta väderdata. Försök igen.')
     } finally {
       setLoading(false)
     }
@@ -113,7 +143,7 @@ export default function VaderPage() {
       setPlaceName(geo.place_name || query)
       await fetchWeather(geo.lat, geo.lng)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'N\u00e5got gick fel')
+      setError(e instanceof Error ? e.message : 'Något gick fel')
       setLoading(false)
     }
   }
@@ -128,7 +158,7 @@ export default function VaderPage() {
       setPlaceName('Min plats')
       await fetchWeather(pos.coords.latitude, pos.coords.longitude)
     } catch {
-      setError('Kunde inte h\u00e4mta din plats. Till\u00e5t plats\u00e5tkomst i webbl\u00e4saren.')
+      setError('Kunde inte hämta din plats. Tillåt platsåtkomst i webbläsaren.')
     } finally {
       setLocating(false)
     }
@@ -138,17 +168,17 @@ export default function VaderPage() {
 
   return (
     <div className="px-4 pt-6 pb-8 max-w-lg mx-auto">
-      <h1 className="text-xl font-semibold mb-1">V\u00e4der</h1>
-      <p className="text-sm text-slate-500 mb-5">Aktuellt v\u00e4der och 5-dagars historik</p>
+      <h1 className="text-xl font-semibold mb-1">Väder</h1>
+      <p className="text-sm text-slate-500 mb-5">Aktuellt väder och 5-dagars historik</p>
 
-      {/* Search */}
+      {/* Sökfält */}
       <div className="flex gap-2 mb-3">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          placeholder="S\u00f6k plats, t.ex. V\u00e4nern"
+          placeholder="Sök plats, t.ex. Vänern"
           className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-700"
         />
         <button
@@ -172,12 +202,12 @@ export default function VaderPage() {
         {locating ? (
           <>
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-slate-500" />
-            H\u00e4mtar plats...
+            Hämtar plats...
           </>
         ) : (
           <>
             <LocationIcon />
-            Anv\u00e4nd min plats
+            Använd min plats
           </>
         )}
       </button>
@@ -190,14 +220,14 @@ export default function VaderPage() {
 
       {weather && (
         <>
-          {/* Place name */}
+          {/* Platsnamn */}
           {placeName && (
             <div className="mb-4">
               <h2 className="text-lg font-semibold">{placeName}</h2>
             </div>
           )}
 
-          {/* Current weather card */}
+          {/* Aktuellt väder */}
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-4">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -214,7 +244,7 @@ export default function VaderPage() {
             <div className="grid grid-cols-2 gap-3">
               <WeatherStat label="Vind" value={
                 weather.current.wind_speed_ms != null
-                  ? `${weather.current.wind_speed_ms} m/s ${weather.current.wind_direction || ''}`
+                  ? `${weather.current.wind_speed_ms} m/s ${directionLabel(weather.current.wind_direction)}`
                   : '\u2014'
               } />
               <WeatherStat label="Lufttryck" value={
@@ -227,7 +257,7 @@ export default function VaderPage() {
                   ? `${weather.current.humidity_pct}%`
                   : '\u2014'
               } />
-              <WeatherStat label="Nederb\u00f6rd" value={
+              <WeatherStat label="Nederbörd" value={
                 weather.current.precipitation_mm != null
                   ? `${weather.current.precipitation_mm} mm`
                   : '\u2014'
@@ -240,7 +270,7 @@ export default function VaderPage() {
             </div>
           </div>
 
-          {/* Trend summary */}
+          {/* Trycktrend */}
           {trend && trend.text && (
             <div className={`mb-4 px-4 py-3 rounded-xl border ${
               trend.color === 'text-green-600'
@@ -251,54 +281,72 @@ export default function VaderPage() {
             </div>
           )}
 
-          {/* 5-day history */}
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="text-sm font-semibold">Senaste dagarna</h3>
+          {/* Senaste dagarna */}
+          <DayTable title="Senaste dagarna" days={weather.history} />
+
+          {/* Kommande dagar */}
+          {weather.forecast.length > 0 && (
+            <div className="mt-4">
+              <DayTable title="Kommande dagar" days={weather.forecast} />
             </div>
-
-            {weather.history.map((day, i) => {
-              const prevPressure = i > 0 ? weather.history[i - 1].pressure_hpa : null
-              const { arrow, color } = pressureTrend(day.pressure_hpa, prevPressure)
-
-              return (
-                <div
-                  key={day.date}
-                  className={`flex items-center px-4 py-3 gap-3 ${
-                    i < weather.history.length - 1 ? 'border-b border-slate-100 dark:border-slate-700' : ''
-                  }`}
-                >
-                  {/* Day */}
-                  <div className="w-16 shrink-0 text-sm font-medium">{formatDay(day.date)}</div>
-
-                  {/* Condition icon */}
-                  <div className="w-6 text-center text-base">{conditionIcon(day.condition)}</div>
-
-                  {/* Temp range */}
-                  <div className="flex-1 text-sm">
-                    {day.temp_min != null && day.temp_max != null
-                      ? `${Math.round(day.temp_min)}\u00b0 / ${Math.round(day.temp_max)}\u00b0`
-                      : '\u2014'}
-                  </div>
-
-                  {/* Pressure + trend */}
-                  <div className="flex items-center gap-1 text-sm text-right">
-                    <span className="text-slate-500">{day.pressure_hpa ?? '\u2014'}</span>
-                    {arrow && <span className={`font-bold ${color}`}>{arrow}</span>}
-                  </div>
-
-                  {/* Precipitation */}
-                  <div className="w-14 text-right text-xs text-slate-400">
-                    {day.precipitation_sum != null && day.precipitation_sum > 0
-                      ? `${day.precipitation_sum} mm`
-                      : ''}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          )}
         </>
       )}
+    </div>
+  )
+}
+
+function DayTable({ title, days }: { title: string; days: DayHistory[] }) {
+  return (
+    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+
+      {days.map((day, i) => {
+        const prevPressure = i > 0 ? days[i - 1].pressure_hpa : null
+        const { arrow, color } = pressureTrend(day.pressure_hpa, prevPressure)
+
+        return (
+          <div
+            key={day.date}
+            className={`px-4 py-3 ${
+              i < days.length - 1 ? 'border-b border-slate-100 dark:border-slate-700' : ''
+            }`}
+          >
+            {/* Rad 1: Dag, ikon, temp, tryck, nederbörd */}
+            <div className="flex items-center gap-3">
+              <div className="w-16 shrink-0 text-sm font-medium">{formatDay(day.date)}</div>
+              <div className="w-6 text-center text-base">{conditionIcon(day.condition)}</div>
+              <div className="flex-1 text-sm">
+                {day.temp_min != null && day.temp_max != null
+                  ? `${Math.round(day.temp_min)}\u00b0 / ${Math.round(day.temp_max)}\u00b0`
+                  : '\u2014'}
+              </div>
+              <div className="flex items-center gap-1 text-sm">
+                <span className="text-slate-500">{day.pressure_hpa ?? '\u2014'}</span>
+                {arrow && <span className={`font-bold ${color}`}>{arrow}</span>}
+              </div>
+              <div className="w-14 text-right text-xs text-slate-400">
+                {day.precipitation_sum != null && day.precipitation_sum > 0
+                  ? `${day.precipitation_sum} mm`
+                  : ''}
+              </div>
+            </div>
+
+            {/* Rad 2: Vindriktning + hastighet */}
+            {(day.wind_direction || day.wind_speed_max_ms != null) && (
+              <div className="mt-1 ml-[calc(4rem+0.75rem+1.5rem+0.75rem)] text-xs text-slate-400 flex items-center gap-1">
+                <WindIcon />
+                <span>
+                  {day.wind_speed_max_ms != null ? `${day.wind_speed_max_ms} m/s` : ''}
+                  {day.wind_direction ? ` ${directionLabel(day.wind_direction)}` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -312,7 +360,7 @@ function WeatherStat({ label, value }: { label: string; value: string }) {
   )
 }
 
-// --- Icons ---
+// --- Ikoner ---
 
 function SearchIcon() {
   return (
@@ -327,6 +375,14 @@ function LocationIcon() {
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+    </svg>
+  )
+}
+
+function WindIcon() {
+  return (
+    <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12h10.879a2.25 2.25 0 0 0 0-4.5H14.25m-5.25 9h7.5a2.25 2.25 0 0 0 0-4.5H4.5" />
     </svg>
   )
 }

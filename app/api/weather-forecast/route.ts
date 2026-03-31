@@ -13,6 +13,18 @@ function cloudToCondition(cloudCover: number, precipitation: number): string {
   return 'Mulet'
 }
 
+interface DayData {
+  date: string
+  temp_max: number | null
+  temp_min: number | null
+  pressure_hpa: number | null
+  precipitation_sum: number | null
+  cloud_cover_avg: number | null
+  wind_speed_max_ms: number | null
+  wind_direction: string | null
+  condition: string
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const lat = searchParams.get('lat')
@@ -23,8 +35,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Open-Meteo Forecast API: current weather + 5 days history
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,cloud_cover_mean,surface_pressure_mean&past_days=5&forecast_days=1&timezone=Europe/Stockholm`
+    // Open-Meteo Forecast API: current + 5 days history + 5 days forecast
+    // wind_direction_10m_dominant gives the dominant wind direction per day
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,surface_pressure_mean&past_days=5&forecast_days=6&timezone=Europe/Stockholm`
 
     const res = await fetch(url)
     if (!res.ok) {
@@ -46,25 +59,16 @@ export async function GET(req: NextRequest) {
       condition: cloudToCondition(c?.cloud_cover ?? 0, c?.precipitation ?? 0),
     }
 
-    // Parse daily history (5 past days + today)
+    // Parse daily data
     const d = data.daily
-    const history: Array<{
-      date: string
-      temp_max: number | null
-      temp_min: number | null
-      pressure_hpa: number | null
-      precipitation_sum: number | null
-      cloud_cover_avg: number | null
-      wind_speed_max_ms: number | null
-      condition: string
-    }> = []
+    const allDays: DayData[] = []
 
     if (d?.time) {
       for (let i = 0; i < d.time.length; i++) {
         const cloud = d.cloud_cover_mean?.[i] ?? 0
         const precip = d.precipitation_sum?.[i] ?? 0
 
-        history.push({
+        allDays.push({
           date: d.time[i],
           temp_max: d.temperature_2m_max?.[i] ?? null,
           temp_min: d.temperature_2m_min?.[i] ?? null,
@@ -72,12 +76,20 @@ export async function GET(req: NextRequest) {
           precipitation_sum: precip,
           cloud_cover_avg: cloud,
           wind_speed_max_ms: d.wind_speed_10m_max?.[i] ? Math.round(d.wind_speed_10m_max[i] / 3.6 * 10) / 10 : null,
+          wind_direction: d.wind_direction_10m_dominant?.[i] != null ? degreeToDirection(d.wind_direction_10m_dominant[i]) : null,
           condition: cloudToCondition(cloud, precip),
         })
       }
     }
 
-    return NextResponse.json({ current, history })
+    // Split into history (past 5 + today) and forecast (tomorrow + 5 days)
+    const todayStr = new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD
+    const todayIndex = allDays.findIndex(day => day.date === todayStr)
+
+    const history = todayIndex >= 0 ? allDays.slice(0, todayIndex + 1) : allDays.slice(0, 6)
+    const forecast = todayIndex >= 0 ? allDays.slice(todayIndex + 1) : []
+
+    return NextResponse.json({ current, history, forecast })
   } catch (err) {
     console.error('Weather forecast error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })
