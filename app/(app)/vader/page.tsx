@@ -25,6 +25,13 @@ interface DayHistory {
   condition: string
 }
 
+interface SunMoonData {
+  sunrise_time: string | null
+  sunset_time: string | null
+  moon_phase: string | null
+  moon_illumination_pct: number | null
+}
+
 interface WeatherData {
   current: CurrentWeather
   history: DayHistory[]
@@ -112,16 +119,40 @@ export default function VaderPage() {
   const [loading, setLoading] = useState(false)
   const [locating, setLocating] = useState(false)
   const [weather, setWeather] = useState<WeatherData | null>(null)
+  const [sunMoon, setSunMoon] = useState<SunMoonData | null>(null)
   const [error, setError] = useState('')
 
   async function fetchWeather(lat: number, lng: number) {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/weather-forecast?lat=${lat}&lng=${lng}`)
-      if (!res.ok) throw new Error('Kunde inte hämta väder')
-      const data: WeatherData = await res.json()
-      setWeather(data)
+      const dateNow = new Date().toISOString()
+
+      const [weatherRes, sunRes, moonRes] = await Promise.allSettled([
+        fetch(`/api/weather-forecast?lat=${lat}&lng=${lng}`),
+        fetch(`/api/sun?lat=${lat}&lng=${lng}&date=${dateNow}`),
+        fetch(`/api/moon?date=${dateNow}`),
+      ])
+
+      if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
+        const data: WeatherData = await weatherRes.value.json()
+        setWeather(data)
+      } else {
+        throw new Error('Kunde inte hämta väder')
+      }
+
+      const sm: SunMoonData = { sunrise_time: null, sunset_time: null, moon_phase: null, moon_illumination_pct: null }
+      if (sunRes.status === 'fulfilled' && sunRes.value.ok) {
+        const s = await sunRes.value.json()
+        sm.sunrise_time = s.sunrise_time || null
+        sm.sunset_time = s.sunset_time || null
+      }
+      if (moonRes.status === 'fulfilled' && moonRes.value.ok) {
+        const m = await moonRes.value.json()
+        sm.moon_phase = m.moon_phase || null
+        sm.moon_illumination_pct = m.moon_illumination_pct ?? null
+      }
+      setSunMoon(sm)
     } catch {
       setError('Kunde inte hämta väderdata. Försök igen.')
     } finally {
@@ -268,6 +299,24 @@ export default function VaderPage() {
                   : '\u2014'
               } />
             </div>
+
+            {/* Sol & Mån */}
+            {sunMoon && (sunMoon.sunrise_time || sunMoon.moon_phase) && (
+              <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-3">
+                {sunMoon.sunrise_time && (
+                  <WeatherStat label="Soluppgång" value={sunMoon.sunrise_time} />
+                )}
+                {sunMoon.sunset_time && (
+                  <WeatherStat label="Solnedgång" value={sunMoon.sunset_time} />
+                )}
+                {sunMoon.moon_phase && (
+                  <WeatherStat label="Månfas" value={sunMoon.moon_phase} />
+                )}
+                {sunMoon.moon_illumination_pct != null && (
+                  <WeatherStat label="Månbelysning" value={`${sunMoon.moon_illumination_pct}%`} />
+                )}
+              </div>
+            )}
           </div>
 
           {/* Trycktrend */}
