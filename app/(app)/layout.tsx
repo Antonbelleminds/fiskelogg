@@ -16,6 +16,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-dvh flex flex-col pb-20">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between max-w-lg mx-auto h-11 px-4">
+          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">FiskeLogg</span>
+          <Link
+            href="/vader"
+            className={`p-1.5 rounded-lg transition-colors ${
+              pathname.startsWith('/vader')
+                ? 'text-primary-700'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            <WeatherIcon className="w-5 h-5" />
+          </Link>
+        </div>
+      </header>
+
       <main className="flex-1">
         {children}
       </main>
@@ -97,6 +114,14 @@ function UserIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    </svg>
+  )
+}
+
+function WeatherIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
     </svg>
   )
 }

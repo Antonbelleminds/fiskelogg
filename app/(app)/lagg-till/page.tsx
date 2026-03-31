@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { extractExif } from '@/lib/exif'
 import CatchForm, { getDefaultFormData, SPECIES_OPTIONS, type CatchFormData } from '@/components/catches/CatchForm'
 import type { ImageAnalysis } from '@/types/database'
@@ -209,6 +210,7 @@ export default function AddCatchPage() {
         ai_weather_description: data.ai_weather_description || null,
         ai_fish_description: data.ai_fish_description || null,
         ai_environment_notes: data.ai_environment_notes || null,
+        catcher_name: data.catcher_name || null,
         exif_captured_at: data.exif_captured_at || null,
         image_url: imageUrl,
         image_path: imagePath,
@@ -289,6 +291,14 @@ export default function AddCatchPage() {
             <GalleryIcon />
             Välj från album
           </button>
+
+          <Link
+            href="/massuppladdning"
+            className="w-full py-8 px-6 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl font-semibold text-lg flex items-center justify-center gap-3 hover:bg-slate-50 active:scale-[0.98] transition"
+          >
+            <BulkIcon />
+            Bulk uppladdning
+          </Link>
 
           <div className="pt-4">
             <button
@@ -393,6 +403,14 @@ function GalleryIcon() {
   return (
     <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" />
+    </svg>
+  )
+}
+
+function BulkIcon() {
+  return (
+    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 19.5V5.25A2.25 2.25 0 0 1 8.25 3h7.5A2.25 2.25 0 0 1 18 5.25V19.5m-10.5 0h9m-9 0a1.5 1.5 0 0 1-1.5-1.5m10.5 1.5a1.5 1.5 0 0 0 1.5-1.5m-12 0V4.5A2.25 2.25 0 0 0 3.75 6.75v10.5A2.25 2.25 0 0 0 6 19.5m12 0V4.5a2.25 2.25 0 0 1 2.25 2.25v10.5A2.25 2.25 0 0 1 18 19.5" />
     </svg>
   )
 }

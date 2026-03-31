@@ -1,140 +1,244 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { extractExif } from '@/lib/exif'
-import type { ImageAnalysis } from '@/types/database'
+import { SPECIES_OPTIONS } from '@/components/catches/CatchForm'
+import { invalidateCache } from '@/lib/cache'
+
+const MAX_IMAGES = 20
 
 interface BulkItem {
   file: File
   preview: string
-  status: 'pending' | 'analyzing' | 'ready' | 'saving' | 'done' | 'error'
+  catcher_name: string
   species: string
-  weight_kg: string
-  length_cm: string
-  water_body: string
-  fishing_method: string
   caught_at: string
   lat: number | null
   lng: number | null
-  ai_fish_description: string
-  weather_condition: string
+  exif_captured_at: string | null
+  skipped: boolean
+  // Background-fetched data
+  location_name: string
+  water_body: string
   weather_temp_c: number | null
+  weather_condition: string
+  wind_speed_ms: number | null
+  wind_direction: string
+  cloud_cover_pct: number | null
+  precipitation_mm: number | null
+  pressure_hpa: number | null
+  humidity_pct: number | null
+  visibility_km: number | null
   moon_phase: string
-  notes: string
-  is_public: boolean
+  moon_illumination_pct: number | null
+  sunrise_time: string
+  sunset_time: string
+  is_golden_hour: boolean | null
+  backgroundLoaded: boolean
 }
+
+type Step = 'select' | 'wizard' | 'saving' | 'done'
 
 export default function MassuppladdningPage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<BulkItem[]>([])
-  const [processing, setProcessing] = useState(false)
-  const [progress, setProgress] = useState({ current: 0, total: 0 })
-  const [saving, setSaving] = useState(false)
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [step, setStep] = useState<Step>('select')
+  const [saveProgress, setSaveProgress] = useState({ current: 0, total: 0, failed: 0 })
+  const [catcherSuggestions, setCatcherSuggestions] = useState<string[]>([])
+  const [speciesFilter, setSpeciesFilter] = useState('')
+  const [showSpeciesDropdown, setShowSpeciesDropdown] = useState(false)
+  const [showCatcherDropdown, setShowCatcherDropdown] = useState(false)
 
-  function updateItem(index: number, updates: Partial<BulkItem>) {
-    setItems((prev) => prev.map((item, i) => (i === index ? { ...item, ...updates } : item)))
+  // Fetch autocomplete suggestions for catcher_name
+  useEffect(() => {
+    fetch('/api/autocomplete?field=catcher_name')
+      .then(r => r.ok ? r.json() : [])
+      .then(setCatcherSuggestions)
+      .catch(() => {})
+  }, [])
+
+  function updateCurrentItem(updates: Partial<BulkItem>) {
+    setItems(prev => prev.map((item, i) => i === currentIndex ? { ...item, ...updates } : item))
+  }
+
+  function updateItemByIndex(index: number, updates: Partial<BulkItem>) {
+    setItems(prev => prev.map((item, i) => i === index ? { ...item, ...updates } : item))
   }
 
   async function handleFiles(files: FileList) {
-    const newItems: BulkItem[] = Array.from(files).slice(0, 50).map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
-      status: 'pending' as const,
-      species: '',
-      weight_kg: '',
-      length_cm: '',
-      water_body: '',
-      fishing_method: '',
-      caught_at: new Date().toISOString().slice(0, 16),
-      lat: null,
-      lng: null,
-      ai_fish_description: '',
-      weather_condition: '',
-      weather_temp_c: null,
-      moon_phase: '',
-      notes: '',
-      is_public: false,
-    }))
+    const selected = Array.from(files).slice(0, MAX_IMAGES)
+    const newItems: BulkItem[] = []
 
-    setItems(newItems)
-    setProcessing(true)
-    setProgress({ current: 0, total: newItems.length })
-
-    for (let i = 0; i < newItems.length; i++) {
-      setProgress({ current: i + 1, total: newItems.length })
-      updateItem(i, { status: 'analyzing' })
+    for (const file of selected) {
+      const preview = URL.createObjectURL(file)
+      let caught_at = new Date().toISOString().slice(0, 16)
+      let lat: number | null = null
+      let lng: number | null = null
+      let exif_captured_at: string | null = null
 
       try {
-        // Extract EXIF
-        const exif = await extractExif(newItems[i].file)
-        const updates: Partial<BulkItem> = {}
-
+        const exif = await extractExif(file)
         if (exif.captured_at) {
-          updates.caught_at = new Date(exif.captured_at).toISOString().slice(0, 16)
+          const d = new Date(exif.captured_at)
+          caught_at = d.toISOString().slice(0, 16)
+          exif_captured_at = d.toISOString()
         }
         if (exif.lat && exif.lng) {
-          updates.lat = exif.lat
-          updates.lng = exif.lng
+          lat = exif.lat
+          lng = exif.lng
         }
+      } catch {}
 
-        // AI analysis
-        const base64 = await fileToBase64(newItems[i].file)
-        const analysisRes = await fetch('/api/analyze-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64, mimeType: newItems[i].file.type }),
-        })
-
-        if (analysisRes.ok) {
-          const analysis: ImageAnalysis = await analysisRes.json()
-          updates.species = analysis.species || ''
-          updates.ai_fish_description = analysis.fish_description || ''
-          updates.weather_condition = analysis.weather_condition || ''
-        }
-
-        // Weather data
-        if (updates.lat && updates.lng) {
-          const dateParam = updates.caught_at || newItems[i].caught_at
-          const [weatherRes, moonRes] = await Promise.allSettled([
-            fetch(`/api/weather?lat=${updates.lat}&lng=${updates.lng}&date=${dateParam}`),
-            fetch(`/api/moon?date=${dateParam}`),
-          ])
-
-          if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
-            const w = await weatherRes.value.json()
-            updates.weather_temp_c = w.weather_temp_c
-            updates.weather_condition = w.weather_condition || updates.weather_condition
-          }
-          if (moonRes.status === 'fulfilled' && moonRes.value.ok) {
-            const m = await moonRes.value.json()
-            updates.moon_phase = m.moon_phase
-          }
-        }
-
-        updateItem(i, { ...updates, status: 'ready' })
-      } catch {
-        updateItem(i, { status: 'error' })
-      }
+      newItems.push({
+        file,
+        preview,
+        catcher_name: '',
+        species: '',
+        caught_at,
+        lat,
+        lng,
+        exif_captured_at,
+        skipped: false,
+        location_name: '',
+        water_body: '',
+        weather_temp_c: null,
+        weather_condition: '',
+        wind_speed_ms: null,
+        wind_direction: '',
+        cloud_cover_pct: null,
+        precipitation_mm: null,
+        pressure_hpa: null,
+        humidity_pct: null,
+        visibility_km: null,
+        moon_phase: '',
+        moon_illumination_pct: null,
+        sunrise_time: '',
+        sunset_time: '',
+        is_golden_hour: null,
+        backgroundLoaded: false,
+      })
     }
 
-    setProcessing(false)
+    setItems(newItems)
+    setCurrentIndex(0)
+    setStep('wizard')
+
+    // Fire background fetches for all images with GPS data (non-blocking)
+    for (let i = 0; i < newItems.length; i++) {
+      const item = newItems[i]
+      if (!item.lat || !item.lng) continue
+
+      const lat = item.lat
+      const lng = item.lng
+      const dateParam = item.exif_captured_at || new Date().toISOString()
+
+      // Fire all four APIs in parallel per image
+      Promise.allSettled([
+        fetch(`/api/geocode?lat=${lat}&lng=${lng}`),
+        fetch(`/api/weather?lat=${lat}&lng=${lng}&date=${dateParam}`),
+        fetch(`/api/moon?date=${dateParam}`),
+        fetch(`/api/sun?lat=${lat}&lng=${lng}&date=${dateParam}`),
+      ]).then(async ([geocodeRes, weatherRes, moonRes, sunRes]) => {
+        const bgUpdates: Partial<BulkItem> = { backgroundLoaded: true }
+
+        if (geocodeRes.status === 'fulfilled' && geocodeRes.value.ok) {
+          const g = await geocodeRes.value.json()
+          if (g.water_body) bgUpdates.water_body = g.water_body
+          if (g.location_name) bgUpdates.location_name = g.location_name
+        }
+        if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
+          const w = await weatherRes.value.json()
+          bgUpdates.weather_temp_c = w.weather_temp_c ?? null
+          bgUpdates.weather_condition = w.weather_condition || ''
+          bgUpdates.wind_speed_ms = w.wind_speed_ms ?? null
+          bgUpdates.wind_direction = w.wind_direction || ''
+          bgUpdates.cloud_cover_pct = w.cloud_cover_pct ?? null
+          bgUpdates.precipitation_mm = w.precipitation_mm ?? null
+          bgUpdates.pressure_hpa = w.pressure_hpa ?? null
+          bgUpdates.humidity_pct = w.humidity_pct ?? null
+          bgUpdates.visibility_km = w.visibility_km ?? null
+        }
+        if (moonRes.status === 'fulfilled' && moonRes.value.ok) {
+          const m = await moonRes.value.json()
+          bgUpdates.moon_phase = m.moon_phase || ''
+          bgUpdates.moon_illumination_pct = m.moon_illumination_pct ?? null
+          bgUpdates.sunrise_time = m.sunrise_time || ''
+          bgUpdates.sunset_time = m.sunset_time || ''
+        }
+        if (sunRes.status === 'fulfilled' && sunRes.value.ok) {
+          const s = await sunRes.value.json()
+          bgUpdates.is_golden_hour = s.is_golden_hour ?? null
+        }
+
+        updateItemByIndex(i, bgUpdates)
+      })
+    }
   }
 
-  async function saveAll() {
-    setSaving(true)
-    const readyItems = items.filter((item) => item.status === 'ready' || item.status === 'error')
+  const currentItem = items[currentIndex]
+  const activeItems = items.filter(i => !i.skipped)
+  const isLast = currentIndex === items.length - 1
 
-    for (let i = 0; i < items.length; i++) {
-      if (items[i].status !== 'ready') continue
-      updateItem(i, { status: 'saving' })
+  function goNext() {
+    if (isLast) {
+      startSaving()
+    } else {
+      // Pre-fill catcher_name from current item for next
+      const currentName = currentItem?.catcher_name || ''
+      const currentSpecies = currentItem?.species || ''
+      setItems(prev => prev.map((item, i) => {
+        if (i === currentIndex + 1 && !item.catcher_name) {
+          return { ...item, catcher_name: currentName }
+        }
+        return item
+      }))
+      setCurrentIndex(prev => prev + 1)
+      setSpeciesFilter('')
+      setShowSpeciesDropdown(false)
+    }
+  }
+
+  function goPrev() {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1)
+      setSpeciesFilter('')
+      setShowSpeciesDropdown(false)
+    }
+  }
+
+  function skipCurrent() {
+    updateCurrentItem({ skipped: true })
+    if (isLast) {
+      startSaving()
+    } else {
+      setCurrentIndex(prev => prev + 1)
+    }
+  }
+
+  async function startSaving() {
+    const toSave = items.filter(i => !i.skipped && i.catcher_name.trim())
+    if (toSave.length === 0) {
+      router.push('/')
+      return
+    }
+
+    setStep('saving')
+    setSaveProgress({ current: 0, total: toSave.length, failed: 0 })
+    let failed = 0
+
+    for (let i = 0; i < toSave.length; i++) {
+      setSaveProgress(prev => ({ ...prev, current: i + 1 }))
+      const item = toSave[i]
 
       try {
-        // Upload image
-        const formData = new FormData()
-        formData.append('file', items[i].file)
-        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData })
+        // Compress and upload image
+        const compressed = await compressForUpload(item.file)
+        const fd = new FormData()
+        fd.append('file', compressed, 'photo.jpg')
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: fd })
         let imageUrl = null
         let imagePath = null
 
@@ -144,171 +248,346 @@ export default function MassuppladdningPage() {
           imagePath = upload.path
         }
 
-        // Save catch
         const res = await fetch('/api/catches', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            caught_at: items[i].caught_at,
-            species: items[i].species || null,
-            weight_kg: items[i].weight_kg ? parseFloat(items[i].weight_kg) : null,
-            length_cm: items[i].length_cm ? parseFloat(items[i].length_cm) : null,
-            water_body: items[i].water_body || null,
-            fishing_method: items[i].fishing_method || null,
-            lat: items[i].lat,
-            lng: items[i].lng,
-            weather_condition: items[i].weather_condition || null,
-            weather_temp_c: items[i].weather_temp_c,
-            moon_phase: items[i].moon_phase || null,
-            ai_fish_description: items[i].ai_fish_description || null,
-            notes: items[i].notes || null,
-            is_public: items[i].is_public,
+            caught_at: item.caught_at || new Date().toISOString(),
+            species: item.species || null,
+            catcher_name: item.catcher_name || null,
+            lat: item.lat,
+            lng: item.lng,
+            location_name: item.location_name || null,
+            water_body: item.water_body || null,
+            exif_captured_at: item.exif_captured_at || null,
+            weather_temp_c: item.weather_temp_c,
+            weather_condition: item.weather_condition || null,
+            wind_speed_ms: item.wind_speed_ms,
+            wind_direction: item.wind_direction || null,
+            cloud_cover_pct: item.cloud_cover_pct,
+            precipitation_mm: item.precipitation_mm,
+            pressure_hpa: item.pressure_hpa,
+            humidity_pct: item.humidity_pct,
+            visibility_km: item.visibility_km,
+            moon_phase: item.moon_phase || null,
+            moon_illumination_pct: item.moon_illumination_pct,
+            sunrise_time: item.sunrise_time || null,
+            sunset_time: item.sunset_time || null,
+            is_golden_hour: item.is_golden_hour,
             image_url: imageUrl,
             image_path: imagePath,
+            is_public: false,
           }),
         })
 
-        updateItem(i, { status: res.ok ? 'done' : 'error' })
+        if (!res.ok) failed++
       } catch {
-        updateItem(i, { status: 'error' })
+        failed++
       }
     }
 
-    setSaving(false)
-    const doneCount = items.filter((i) => i.status === 'done').length
-    if (doneCount > 0) {
-      router.push('/loggbok')
-    }
+    setSaveProgress(prev => ({ ...prev, failed }))
+    invalidateCache('home-catches', 'stats-catches', 'map-catches')
+    setStep('done')
   }
 
-  return (
-    <div className="px-4 pt-6 pb-8 max-w-lg mx-auto">
-      <h1 className="text-xl font-semibold mb-2">Massuppladdning</h1>
-      <p className="text-sm text-slate-500 mb-4">Ladda upp flera bilder och AI analyserar dem åt dig</p>
+  // --- SELECT STEP ---
+  if (step === 'select') {
+    return (
+      <div className="px-4 pt-6 pb-8 max-w-lg mx-auto">
+        <button onClick={() => router.back()} className="mb-4 text-sm text-slate-500 flex items-center gap-1">
+          <ArrowLeftIcon /> Tillbaka
+        </button>
+        <h1 className="text-xl font-semibold mb-2">Bulk uppladdning</h1>
+        <p className="text-sm text-slate-500 mb-6">
+          Välj upp till {MAX_IMAGES} bilder. Du går sedan igenom dem en i taget och anger fångstperson och art.
+        </p>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => {
-          if (e.target.files?.length) handleFiles(e.target.files)
-        }}
-      />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            if (e.target.files?.length) handleFiles(e.target.files)
+          }}
+        />
 
-      {items.length === 0 ? (
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-full py-12 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl text-center hover:border-primary-400 hover:bg-primary-50/50 transition"
+          className="w-full py-12 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl text-center hover:border-primary-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
         >
-          <div className="text-4xl mb-2">📸</div>
-          <div className="font-medium text-slate-700 dark:text-slate-300">Välj bilder</div>
-          <div className="text-xs text-slate-500 mt-1">Max 50 bilder åt gången</div>
+          <PhotoStackIcon />
+          <div className="font-medium text-slate-700 dark:text-slate-300 mt-3">Välj bilder</div>
+          <div className="text-xs text-slate-500 mt-1">Max {MAX_IMAGES} bilder</div>
         </button>
-      ) : (
-        <>
-          {processing && (
-            <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-xl p-4 mb-4">
-              <div className="flex items-center gap-3">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-700" />
-                <span className="text-sm font-medium text-primary-800 dark:text-primary-200">
-                  Analyserar bild {progress.current} av {progress.total}...
-                </span>
-              </div>
-              <div className="mt-2 h-2 bg-primary-100 dark:bg-primary-900 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary-600 rounded-full transition-all"
-                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
+      </div>
+    )
+  }
 
-          <div className="space-y-4">
-            {items.map((item, i) => (
-              <div key={i} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <div className="flex gap-3 p-3">
-                  <img src={item.preview} alt="" className="w-20 h-20 object-cover rounded-lg shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <StatusBadge status={item.status} />
-                    </div>
-                    <input
-                      type="text"
-                      value={item.species}
-                      onChange={(e) => updateItem(i, { species: e.target.value })}
-                      placeholder="Art"
-                      className="w-full text-sm px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-transparent mb-1"
-                    />
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.weight_kg}
-                        onChange={(e) => updateItem(i, { weight_kg: e.target.value })}
-                        placeholder="Vikt kg"
-                        className="flex-1 text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-transparent"
-                      />
-                      <input
-                        type="number"
-                        value={item.length_cm}
-                        onChange={(e) => updateItem(i, { length_cm: e.target.value })}
-                        placeholder="Längd cm"
-                        className="flex-1 text-xs px-2 py-1 rounded border border-slate-200 dark:border-slate-700 bg-transparent"
-                      />
-                    </div>
-                  </div>
-                </div>
+  // --- SAVING STEP ---
+  if (step === 'saving') {
+    return (
+      <div className="px-4 pt-6 pb-8 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-700 mb-6" />
+        <p className="text-lg font-semibold mb-2">
+          Sparar {saveProgress.current} av {saveProgress.total}...
+        </p>
+        <div className="w-full max-w-xs h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary-700 rounded-full transition-all"
+            style={{ width: `${(saveProgress.current / saveProgress.total) * 100}%` }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // --- DONE STEP ---
+  if (step === 'done') {
+    const saved = saveProgress.total - saveProgress.failed
+    return (
+      <div className="px-4 pt-6 pb-8 max-w-lg mx-auto flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mb-4">
+          <CheckIcon />
+        </div>
+        <p className="text-lg font-semibold mb-1">
+          {saved} {saved === 1 ? 'fångst sparad' : 'fångster sparade'}
+        </p>
+        {saveProgress.failed > 0 && (
+          <p className="text-sm text-red-500 mb-4">
+            {saveProgress.failed} kunde inte sparas
+          </p>
+        )}
+        <button
+          onClick={() => { router.push('/'); router.refresh() }}
+          className="mt-4 py-3 px-8 rounded-xl bg-primary-700 text-white font-medium hover:bg-primary-800 transition"
+        >
+          Till startsidan
+        </button>
+      </div>
+    )
+  }
+
+  // --- WIZARD STEP ---
+  const filteredSpecies = speciesFilter
+    ? SPECIES_OPTIONS.filter(s => s.toLowerCase().includes(speciesFilter.toLowerCase()))
+    : SPECIES_OPTIONS
+
+  const filteredCatchers = currentItem?.catcher_name
+    ? catcherSuggestions.filter(s => s.toLowerCase().includes(currentItem.catcher_name.toLowerCase()) && s.toLowerCase() !== currentItem.catcher_name.toLowerCase())
+    : catcherSuggestions
+
+  return (
+    <div className="px-4 pt-4 pb-8 max-w-lg mx-auto">
+      {/* Header with progress */}
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => currentIndex === 0 ? setStep('select') : goPrev()} className="text-sm text-slate-500 flex items-center gap-1">
+          <ArrowLeftIcon /> {currentIndex === 0 ? 'Bilder' : 'Föregående'}
+        </button>
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+          {currentIndex + 1} av {items.length}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1 bg-slate-200 dark:bg-slate-700 rounded-full mb-4 overflow-hidden">
+        <div
+          className="h-full bg-primary-700 rounded-full transition-all"
+          style={{ width: `${((currentIndex + 1) / items.length) * 100}%` }}
+        />
+      </div>
+
+      {/* Image thumbnail strip */}
+      <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 -mx-1 px-1">
+        {items.map((item, i) => (
+          <button
+            key={i}
+            onClick={() => { setCurrentIndex(i); setSpeciesFilter(''); setShowSpeciesDropdown(false) }}
+            className={`shrink-0 w-12 h-12 rounded-lg overflow-hidden border-2 transition ${
+              i === currentIndex ? 'border-primary-700 ring-1 ring-primary-700' :
+              item.skipped ? 'border-slate-200 opacity-40' :
+              item.catcher_name ? 'border-green-400' : 'border-slate-200 dark:border-slate-700'
+            }`}
+          >
+            <img src={item.preview} alt="" className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+
+      {currentItem && (
+        <>
+          {/* Main image */}
+          <div className="rounded-2xl overflow-hidden aspect-[4/3] relative mb-4">
+            <img src={currentItem.preview} alt="Fångst" className="w-full h-full object-cover" />
+            {currentItem.skipped && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <span className="text-white font-medium">Hoppas över</span>
               </div>
-            ))}
+            )}
           </div>
 
-          {!processing && (
+          {/* Form fields */}
+          <div className="space-y-3">
+            {/* Catcher name */}
+            <div className="relative">
+              <label className="block text-xs font-medium text-slate-500 mb-1">
+                Fångstperson <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={currentItem.catcher_name}
+                onChange={(e) => { updateCurrentItem({ catcher_name: e.target.value }); setShowCatcherDropdown(true) }}
+                onFocus={() => setShowCatcherDropdown(true)}
+                onBlur={() => setTimeout(() => setShowCatcherDropdown(false), 200)}
+                placeholder="Vem fångade fisken?"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-700"
+              />
+              {showCatcherDropdown && filteredCatchers.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-32 overflow-y-auto">
+                  {filteredCatchers.slice(0, 5).map(name => (
+                    <button
+                      key={name}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { updateCurrentItem({ catcher_name: name }); setShowCatcherDropdown(false) }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Species */}
+            <div className="relative">
+              <label className="block text-xs font-medium text-slate-500 mb-1">Art</label>
+              <input
+                type="text"
+                value={currentItem.species || speciesFilter}
+                onChange={(e) => {
+                  setSpeciesFilter(e.target.value)
+                  updateCurrentItem({ species: e.target.value })
+                  setShowSpeciesDropdown(true)
+                }}
+                onFocus={() => setShowSpeciesDropdown(true)}
+                onBlur={() => setTimeout(() => setShowSpeciesDropdown(false), 200)}
+                placeholder="Välj eller skriv art"
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-700"
+              />
+              {showSpeciesDropdown && filteredSpecies.length > 0 && (
+                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                  {filteredSpecies.map(s => (
+                    <button
+                      key={s}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { updateCurrentItem({ species: s }); setSpeciesFilter(''); setShowSpeciesDropdown(false) }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${
+                        currentItem.species === s ? 'bg-primary-50 dark:bg-primary-900/20 font-medium' : ''
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Date/time (from EXIF) */}
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Datum & tid</label>
+              <input
+                type="datetime-local"
+                value={currentItem.caught_at}
+                onChange={(e) => updateCurrentItem({ caught_at: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary-700"
+              />
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="mt-6 space-y-3">
             <button
-              onClick={saveAll}
-              disabled={saving || items.every((i) => i.status !== 'ready')}
-              className="w-full mt-4 py-3.5 px-4 rounded-xl bg-primary-700 text-white font-medium hover:bg-primary-800 disabled:opacity-50 transition"
+              onClick={goNext}
+              disabled={!currentItem.catcher_name.trim()}
+              className="w-full py-3.5 px-4 rounded-xl bg-primary-700 text-white font-medium hover:bg-primary-800 disabled:opacity-40 transition flex items-center justify-center gap-2"
             >
-              {saving ? 'Sparar...' : `Spara ${items.filter((i) => i.status === 'ready').length} fångster`}
+              {isLast ? (
+                <>Spara alla ({activeItems.length} st)</>
+              ) : (
+                <>Nästa <ArrowRightIcon /></>
+              )}
             </button>
-          )}
+
+            <button
+              onClick={skipCurrent}
+              className="w-full py-2.5 px-4 rounded-xl text-slate-500 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition text-sm"
+            >
+              Hoppa över denna bild
+            </button>
+          </div>
         </>
       )}
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: 'bg-slate-100 text-slate-600',
-    analyzing: 'bg-amber-100 text-amber-700',
-    ready: 'bg-green-100 text-green-700',
-    saving: 'bg-blue-100 text-blue-700',
-    done: 'bg-green-100 text-green-700',
-    error: 'bg-red-100 text-red-700',
-  }
-  const labels: Record<string, string> = {
-    pending: 'Väntar',
-    analyzing: 'Analyserar...',
-    ready: 'Klar',
-    saving: 'Sparar...',
-    done: 'Sparad ✓',
-    error: 'Fel',
-  }
+// --- Icons ---
 
+function ArrowLeftIcon() {
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${styles[status]}`}>
-      {labels[status]}
-    </span>
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+    </svg>
   )
 }
 
-async function fileToBase64(file: File): Promise<string> {
+function ArrowRightIcon() {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+    </svg>
+  )
+}
+
+function CheckIcon() {
+  return (
+    <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+    </svg>
+  )
+}
+
+function PhotoStackIcon() {
+  return (
+    <div className="flex justify-center">
+      <svg className="w-12 h-12 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 19.5V5.25A2.25 2.25 0 0 1 8.25 3h7.5A2.25 2.25 0 0 1 18 5.25V19.5m-10.5 0h9m-9 0a1.5 1.5 0 0 1-1.5-1.5m10.5 1.5a1.5 1.5 0 0 0 1.5-1.5m-12 0V4.5A2.25 2.25 0 0 0 3.75 6.75v10.5A2.25 2.25 0 0 0 6 19.5m12 0V4.5a2.25 2.25 0 0 1 2.25 2.25v10.5A2.25 2.25 0 0 1 18 19.5" />
+      </svg>
+    </div>
+  )
+}
+
+async function compressForUpload(file: File): Promise<Blob> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = reject
-    reader.readAsDataURL(file)
+    const img = new Image()
+    const objectUrl = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 1920
+      let { width, height } = img
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round((height * MAX) / width); width = MAX }
+        else { width = Math.round((width * MAX) / height); height = MAX }
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
+      URL.revokeObjectURL(objectUrl)
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Compression failed')), 'image/jpeg', 0.85)
+    }
+    img.onerror = reject
+    img.src = objectUrl
   })
 }
