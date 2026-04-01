@@ -768,10 +768,16 @@ function FiskepinSection({ userId }: { userId: string | null }) {
         <h3 className="font-semibold text-sm">Fiskepin (valfritt)</h3>
       </div>
 
-      <p className="text-xs text-slate-500 mb-3">
+      <p className="text-xs text-slate-500 mb-2">
         Dina fiskeplaster skyddas redan — ingen annan användare kan se dem. Med en fiskepin krypteras platserna
         så att inte ens den som administrerar databasen kan läsa dem.
       </p>
+
+      <div className="bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 mb-2">
+        <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+          AES-256-GCM &middot; PBKDF2-SHA256 (200k iter) &middot; Unik IV per fångst &middot; Web Crypto API
+        </p>
+      </div>
 
       <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-3">
         <p className="text-xs text-amber-700 dark:text-amber-300">
