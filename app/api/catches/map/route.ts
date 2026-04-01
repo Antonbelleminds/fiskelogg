@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
     let query = admin
       .from('catches')
-      .select('id, species, weight_kg, exif_lat, exif_lng, caught_at, user_id, water_body, fishing_method, lure_type, weather_condition, moon_phase, length_cm')
+      .select('id, species, weight_kg, exif_lat, exif_lng, caught_at, user_id, water_body, fishing_method, lure_type, weather_condition, moon_phase, length_cm, location_encrypted, encrypted_location, encryption_iv')
 
     if (scope === 'friends') {
       // Fetch accepted friends who have share_location=true
@@ -44,11 +44,10 @@ export async function GET(req: NextRequest) {
         .not('exif_lat', 'is', null)
         .not('exif_lng', 'is', null)
     } else {
-      // Default: only the user's own catches with coordinates
+      // Default: only the user's own catches with coordinates OR encrypted location
       query = query
         .eq('user_id', user.id)
-        .not('exif_lat', 'is', null)
-        .not('exif_lng', 'is', null)
+        .or('exif_lat.not.is.null,location_encrypted.eq.true')
     }
 
     query = query.order('caught_at', { ascending: false })

@@ -7,10 +7,12 @@ import { sv } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import CatchForm, { type CatchFormData } from '@/components/catches/CatchForm'
 import type { CatchWithProfile } from '@/types/database'
+import { usePin } from '@/contexts/PinContext'
 
 export default function CatchDetailPage() {
   const { id } = useParams()
   const router = useRouter()
+  const { isUnlocked, decrypt } = usePin()
   const [catchData, setCatchData] = useState<CatchWithProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [liked, setLiked] = useState(false)
@@ -45,6 +47,24 @@ export default function CatchDetailPage() {
     }
     load()
   }, [id, supabase])
+
+  // Decrypt location if encrypted and PIN is unlocked
+  useEffect(() => {
+    if (!isUnlocked || !catchData) return
+    if (!catchData.location_encrypted || !catchData.encrypted_location || !catchData.encryption_iv) return
+    if (catchData.exif_lat) return // already decrypted
+
+    decrypt(catchData.encrypted_location, catchData.encryption_iv).then(loc => {
+      if (!loc) return
+      setCatchData(prev => prev ? {
+        ...prev,
+        exif_lat: loc.exif_lat,
+        exif_lng: loc.exif_lng,
+        water_body: loc.water_body,
+        location_name: loc.location_name,
+      } : null)
+    })
+  }, [isUnlocked, catchData, decrypt])
 
   const isOwner = currentUserId && catchData?.user_id === currentUserId
 

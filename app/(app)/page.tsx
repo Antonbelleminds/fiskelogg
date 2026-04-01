@@ -7,6 +7,7 @@ import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import type { CatchWithProfile } from '@/types/database'
 import { getCache, setCache } from '@/lib/cache'
+import { useDecryptCatches } from '@/lib/useDecryptCatches'
 
 type Tab = 'mine' | 'friends'
 
@@ -27,6 +28,9 @@ export default function HomePage() {
   const [showFilters, setShowFilters] = useState(false)
   const pageRef = useRef(0)
   const PAGE_SIZE = 10
+
+  // Decrypt encrypted catches when PIN is unlocked
+  useDecryptCatches(myCatches, setMyCatches)
 
   useEffect(() => {
     async function load() {

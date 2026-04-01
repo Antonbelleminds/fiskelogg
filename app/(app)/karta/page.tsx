@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { getCache, setCache } from '@/lib/cache'
+import { useDecryptCatches } from '@/lib/useDecryptCatches'
 
 interface MapCatch {
   id: string
@@ -17,6 +18,9 @@ interface MapCatch {
   lure_type: string | null
   weather_condition: string | null
   moon_phase: string | null
+  location_encrypted?: boolean
+  encrypted_location?: string | null
+  encryption_iv?: string | null
   profiles?: { username: string; display_name: string | null; avatar_url: string | null } | null
 }
 
@@ -63,6 +67,9 @@ export default function KartaPage() {
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
+
+  // Decrypt encrypted catches when PIN is unlocked
+  useDecryptCatches(catches, setCatches)
 
   // Lazy-load friend catches only when "Alla" filter is selected
   useEffect(() => {

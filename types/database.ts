@@ -52,6 +52,9 @@ export interface Catch {
   exif_captured_at: string | null
   exif_lat: number | null
   exif_lng: number | null
+  location_encrypted: boolean
+  encrypted_location: string | null
+  encryption_iv: string | null
   likes_count: number
   created_at: string
   updated_at: string
