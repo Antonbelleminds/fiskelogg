@@ -11,8 +11,8 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url)
-    const page = parseInt(searchParams.get('page') || '0')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const page = Math.max(0, parseInt(searchParams.get('page') || '0') || 0)
+    const limit = Math.max(1, Math.min(100, parseInt(searchParams.get('limit') || '20') || 20))
     const species = searchParams.get('species')
     const method = searchParams.get('method')
     const lureType = searchParams.get('lure_type')
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
     if (error) {
       console.error('Create catch error:', JSON.stringify(error, null, 2))
       return NextResponse.json(
-        { error: `Kunde inte spara fångst: ${error.message || error.code || 'okänt fel'}`, details: error },
+        { error: 'Kunde inte spara fångsten. Försök igen.' },
         { status: 500 }
       )
     }

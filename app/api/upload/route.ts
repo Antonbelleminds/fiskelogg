@@ -18,7 +18,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ingen fil' }, { status: 400 })
     }
 
-    const ext = file.name.split('.').pop() || 'jpg'
+    // Validate file type
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: 'Otillåten filtyp. Bara bilder tillåtna.' }, { status: 400 })
+    }
+
+    // Validate file size (max 10 MB)
+    const MAX_SIZE = 10 * 1024 * 1024
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json({ error: 'Filen är för stor. Max 10 MB.' }, { status: 413 })
+    }
+
+    const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
     const fileName = `${user.id}/${Date.now()}.${ext}`
 
     const admin = createAdminClient()

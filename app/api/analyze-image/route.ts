@@ -9,8 +9,13 @@ export async function POST(req: NextRequest) {
   try {
     const { image, mimeType } = await req.json()
 
-    if (!image) {
+    if (!image || typeof image !== 'string') {
       return NextResponse.json({ error: 'Ingen bild skickad' }, { status: 400 })
+    }
+
+    // Max 5 MB base64 (roughly 3.75 MB decoded image)
+    if (image.length > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Bilden är för stor' }, { status: 413 })
     }
 
     const mediaType = VALID_MEDIA_TYPES.includes(mimeType) ? mimeType : 'image/jpeg'

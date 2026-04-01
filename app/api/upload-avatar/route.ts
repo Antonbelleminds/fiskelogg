@@ -11,8 +11,20 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File
     if (!file) return NextResponse.json({ error: 'Ingen fil' }, { status: 400 })
 
+    // Validate file type
+    const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: 'Otillåten filtyp. Bara bilder tillåtna.' }, { status: 400 })
+    }
+
+    // Validate file size (max 5 MB for avatars)
+    const MAX_SIZE = 5 * 1024 * 1024
+    if (file.size > MAX_SIZE) {
+      return NextResponse.json({ error: 'Filen är för stor. Max 5 MB.' }, { status: 413 })
+    }
+
     const admin = createAdminClient()
-    const ext = file.name.split('.').pop() || 'jpg'
+    const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
     const fileName = `${user.id}/avatar.${ext}`
 
     const { data, error } = await admin.storage

@@ -62,7 +62,12 @@ Om ingen matchar, returnera [].`,
       return NextResponse.json({ matchingIds: [] })
     }
 
-    const matchingIds: string[] = JSON.parse(jsonMatch[0])
+    const parsed = JSON.parse(jsonMatch[0])
+    // Validate: must be array of UUID-like strings
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const matchingIds: string[] = Array.isArray(parsed)
+      ? parsed.filter((id: unknown) => typeof id === 'string' && UUID_RE.test(id))
+      : []
     return NextResponse.json({ matchingIds })
   } catch (error) {
     console.error('Search error:', error)

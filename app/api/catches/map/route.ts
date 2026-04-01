@@ -25,13 +25,13 @@ export async function GET(req: NextRequest) {
       // Fetch accepted friends who have share_location=true
       const { data: friendships } = await admin
         .from('friendships')
-        .select('user_id_1, user_id_2, share_location')
+        .select('requester_id, addressee_id, share_location')
         .eq('status', 'accepted')
         .eq('share_location', true)
-        .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`)
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
 
       const friendIds = (friendships || []).map(f =>
-        f.user_id_1 === user.id ? f.user_id_2 : f.user_id_1
+        f.requester_id === user.id ? f.addressee_id : f.requester_id
       )
 
       if (friendIds.length === 0) {
