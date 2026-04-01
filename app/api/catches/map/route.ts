@@ -22,8 +22,24 @@ export async function GET(req: NextRequest) {
       .select('id, species, weight_kg, exif_lat, exif_lng, caught_at, user_id, water_body, fishing_method, lure_type, weather_condition, moon_phase, length_cm')
 
     if (scope === 'friends') {
-      // Show public catches from all users, excluding those without location sharing
+      // Fetch accepted friends who have share_location=true
+      const { data: friendships } = await admin
+        .from('friendships')
+        .select('user_id_1, user_id_2, share_location')
+        .eq('status', 'accepted')
+        .eq('share_location', true)
+        .or(`user_id_1.eq.${user.id},user_id_2.eq.${user.id}`)
+
+      const friendIds = (friendships || []).map(f =>
+        f.user_id_1 === user.id ? f.user_id_2 : f.user_id_1
+      )
+
+      if (friendIds.length === 0) {
+        return NextResponse.json([])
+      }
+
       query = query
+        .in('user_id', friendIds)
         .eq('is_public', true)
         .not('exif_lat', 'is', null)
         .not('exif_lng', 'is', null)
