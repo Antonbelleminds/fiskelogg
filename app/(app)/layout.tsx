@@ -1,7 +1,10 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { PinProvider, usePin } from '@/contexts/PinContext'
+import { createClient } from '@/lib/supabase/client'
 
 const navItems = [
   { href: '/', label: 'Hem', icon: HomeIcon },
@@ -12,10 +15,99 @@ const navItems = [
 ]
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <PinProvider>
+      <PinGate>{children}</PinGate>
+    </PinProvider>
+  )
+}
+
+function PinGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const { hasPinSet, isUnlocked, unlock, setProfilePin } = usePin()
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState('')
+  const [attempts, setAttempts] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+
+  // Load pin_hash/pin_salt from profile on mount
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) { setLoaded(true); return }
+      const { data } = await supabase
+        .from('profiles')
+        .select('pin_hash, pin_salt')
+        .eq('id', user.id)
+        .single()
+      if (data) setProfilePin(data.pin_hash, data.pin_salt)
+      setLoaded(true)
+    })
+  }, [setProfilePin])
+
+  async function handlePinSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (attempts >= 5) return
+    setPinError('')
+    const ok = await unlock(pinInput)
+    if (!ok) {
+      setAttempts(a => a + 1)
+      setPinError(attempts >= 4 ? 'För många försök. Ladda om sidan.' : 'Fel pin. Försök igen.')
+      setPinInput('')
+    }
+  }
+
+  // Show PIN overlay if pin is set but not unlocked
+  const showOverlay = loaded && hasPinSet && !isUnlocked
 
   return (
     <div className="min-h-dvh flex flex-col pb-20">
+      {/* PIN Overlay */}
+      {showOverlay && (
+        <div className="fixed inset-0 z-[100] bg-white dark:bg-slate-900 flex items-center justify-center px-4">
+          <div className="w-full max-w-sm space-y-6 text-center">
+            <div>
+              <LockIcon />
+              <h2 className="text-xl font-semibold mt-4">Ange din fiskepin</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Din platsdata är krypterad. Ange pinkoden för att låsa upp.
+              </p>
+            </div>
+            <form onSubmit={handlePinSubmit} className="space-y-3">
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={pinInput}
+                onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))}
+                placeholder="PIN"
+                autoFocus
+                disabled={attempts >= 5}
+                className="w-full text-center text-2xl tracking-[0.5em] px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-700"
+              />
+              {pinError && <p className="text-sm text-red-500">{pinError}</p>}
+              <button
+                type="submit"
+                disabled={pinInput.length < 4 || attempts >= 5}
+                className="w-full py-3 rounded-xl bg-primary-700 text-white font-medium disabled:opacity-40 transition"
+              >
+                Lås upp
+              </button>
+            </form>
+            <p className="text-xs text-slate-400">
+              Du kan använda appen utan pin — platsdata visas då inte.
+            </p>
+            <button
+              onClick={() => setProfilePin(null, null)}
+              className="text-xs text-slate-400 underline"
+            >
+              Fortsätt utan att låsa upp
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between max-w-lg mx-auto h-11 px-4">
@@ -114,6 +206,14 @@ function UserIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+    </svg>
+  )
+}
+
+function LockIcon() {
+  return (
+    <svg className="w-12 h-12 mx-auto text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
     </svg>
   )
 }

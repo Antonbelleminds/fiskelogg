@@ -4,13 +4,22 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCache, setCache } from '@/lib/cache'
+import { usePin } from '@/contexts/PinContext'
+import { generateSalt, deriveVerificationHash, deriveEncryptionKey, encryptLocation, type EncryptedLocation } from '@/lib/crypto'
 import type { Profile, FriendWithProfile } from '@/types/database'
+
+interface TeamMember {
+  user_id: string
+  role: string
+  name: string
+}
 
 interface TeamWithMeta {
   id: string
   name: string
   created_by: string
   member_count: number
+  members: TeamMember[]
   my_role: string
 }
 
@@ -219,13 +228,30 @@ export default function ProfilPage() {
     await loadTeams()
   }
 
+  const [addingMember, setAddingMember] = useState<string | null>(null)
+  const [teamError, setTeamError] = useState('')
+
   async function addFriendToTeam(teamId: string, friendUserId: string) {
-    await fetch(`/api/teams/${teamId}/members`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: friendUserId }),
-    })
-    await loadTeams()
+    setAddingMember(`${teamId}-${friendUserId}`)
+    setTeamError('')
+    try {
+      const res = await fetch(`/api/teams/${teamId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: friendUserId }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setTeamError(data.error || 'Kunde inte lägga till medlem')
+        setTimeout(() => setTeamError(''), 3000)
+      }
+      await loadTeams()
+    } catch {
+      setTeamError('Något gick fel')
+      setTimeout(() => setTeamError(''), 3000)
+    } finally {
+      setAddingMember(null)
+    }
   }
 
   if (loading) {
@@ -527,26 +553,65 @@ export default function ProfilPage() {
                   </div>
                 </div>
 
-                {/* Add friend to team */}
-                {acceptedFriends.length > 0 && (
+                {/* Current members */}
+                {t.members && t.members.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                    <div className="text-xs text-slate-500 mb-1">Lägg till vän:</div>
-                    <div className="flex flex-wrap gap-1">
-                      {acceptedFriends.map((f) => {
-                        const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
-                        return (
-                          <button
-                            key={f.id}
-                            onClick={() => addFriendToTeam(t.id, friendUserId)}
-                            className="px-2 py-1 text-xs rounded-md bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 transition"
-                          >
-                            + {f.friend_profile?.display_name || f.friend_profile?.username}
-                          </button>
-                        )
-                      })}
+                    <div className="text-xs text-slate-500 mb-1.5">Medlemmar:</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {t.members.map((m) => (
+                        <span
+                          key={m.user_id}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
+                        >
+                          <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
+                          </svg>
+                          <span className="dark:text-slate-300">{m.name}</span>
+                          {m.role === 'admin' && <span className="text-[9px] text-amber-500 font-medium">Admin</span>}
+                        </span>
+                      ))}
                     </div>
                   </div>
                 )}
+
+                {/* Add friend to team - only show friends NOT already in the team */}
+                {(() => {
+                  const memberIds = new Set((t.members || []).map(m => m.user_id))
+                  const friendsNotInTeam = acceptedFriends.filter(f => {
+                    const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
+                    return !memberIds.has(friendUserId)
+                  })
+                  if (friendsNotInTeam.length === 0) return null
+                  return (
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                      <div className="text-xs text-slate-500 mb-1">Lägg till vän i laget:</div>
+                      {teamError && <p className="text-xs text-red-500 mb-1">{teamError}</p>}
+                      <div className="flex flex-wrap gap-1">
+                        {friendsNotInTeam.map((f) => {
+                          const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
+                          const isAdding = addingMember === `${t.id}-${friendUserId}`
+                          return (
+                            <button
+                              key={f.id}
+                              onClick={() => addFriendToTeam(t.id, friendUserId)}
+                              disabled={isAdding}
+                              className="px-2 py-1 text-xs rounded-md bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition disabled:opacity-50"
+                            >
+                              {isAdding ? (
+                                <span className="flex items-center gap-1">
+                                  <span className="w-3 h-3 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                                  Lägger till...
+                                </span>
+                              ) : (
+                                `+ ${f.friend_profile?.display_name || f.friend_profile?.username}`
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             ))}
           </div>
@@ -556,12 +621,232 @@ export default function ProfilPage() {
       </div>
 
       {/* Logout */}
+      {/* Fiskepin */}
+      <FiskepinSection userId={userId} />
+
       <button
         onClick={handleLogout}
         className="w-full mt-8 py-3 text-red-600 font-medium text-sm rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition"
       >
         Logga ut
       </button>
+    </div>
+  )
+}
+
+function FiskepinSection({ userId }: { userId: string | null }) {
+  const { hasPinSet, isUnlocked, setProfilePin, encryptionKey } = usePin()
+  const [pinInput, setPinInput] = useState('')
+  const [confirmInput, setConfirmInput] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [encrypting, setEncrypting] = useState(false)
+  const [encryptProgress, setEncryptProgress] = useState({ current: 0, total: 0 })
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const supabase = createClient()
+
+  async function handleSetPin() {
+    if (!userId) return
+    if (pinInput.length < 4 || pinInput.length > 6) {
+      setError('Pinkoden måste vara 4-6 siffror.')
+      return
+    }
+    if (pinInput !== confirmInput) {
+      setError('Pinkoderna matchar inte.')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      const salt = generateSalt()
+      const hash = await deriveVerificationHash(pinInput, salt)
+
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ pin_hash: hash, pin_salt: salt })
+        .eq('id', userId)
+
+      if (dbError) throw dbError
+
+      setProfilePin(hash, salt)
+      setPinInput('')
+      setConfirmInput('')
+      setMessage('Fiskepin sparad! Ladda om sidan och ange din pin för att aktivera kryptering.')
+    } catch {
+      setError('Kunde inte spara pinkoden.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemovePin() {
+    if (!userId) return
+    setRemoving(true)
+    setError('')
+    try {
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ pin_hash: null, pin_salt: null })
+        .eq('id', userId)
+
+      if (dbError) throw dbError
+
+      setProfilePin(null, null)
+      setMessage('Fiskepin borttagen. Befintligt krypterade platser förblir krypterade.')
+    } catch {
+      setError('Kunde inte ta bort pinkoden.')
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  async function handleEncryptExisting() {
+    if (!userId || !encryptionKey) return
+    setEncrypting(true)
+    setError('')
+    setMessage('')
+
+    try {
+      // Fetch all unencrypted catches with location data
+      const res = await fetch('/api/catches?limit=100&scope=mine')
+      if (!res.ok) throw new Error('Fetch failed')
+      const catches = await res.json()
+      const unencrypted = (catches as Array<{
+        id: string; exif_lat: number | null; exif_lng: number | null;
+        location_name: string | null; water_body: string | null;
+        location_encrypted: boolean
+      }>).filter(c =>
+        !c.location_encrypted && (c.exif_lat || c.exif_lng || c.location_name || c.water_body)
+      )
+
+      if (unencrypted.length === 0) {
+        setMessage('Alla fångster med platsdata är redan krypterade.')
+        setEncrypting(false)
+        return
+      }
+
+      setEncryptProgress({ current: 0, total: unencrypted.length })
+
+      for (let i = 0; i < unencrypted.length; i++) {
+        setEncryptProgress({ current: i + 1, total: unencrypted.length })
+        const c = unencrypted[i]
+        const locationData: EncryptedLocation = {
+          exif_lat: c.exif_lat, exif_lng: c.exif_lng,
+          location_name: c.location_name, water_body: c.water_body,
+        }
+
+        const { encrypted_location, encryption_iv } = await encryptLocation(locationData, encryptionKey)
+
+        // Update the catch via PATCH
+        await fetch(`/api/catches/${c.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            exif_lat: null, exif_lng: null, location: null,
+            location_name: null, water_body: null,
+            location_encrypted: true, encrypted_location, encryption_iv,
+          }),
+        })
+      }
+
+      setMessage(`${unencrypted.length} fångster krypterade!`)
+    } catch {
+      setError('Kunde inte kryptera befintliga fångster.')
+    } finally {
+      setEncrypting(false)
+    }
+  }
+
+  return (
+    <div className="mt-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+        </svg>
+        <h3 className="font-semibold text-sm">Fiskepin (valfritt)</h3>
+      </div>
+
+      <p className="text-xs text-slate-500 mb-3">
+        Dina fiskeplaster skyddas redan — ingen annan användare kan se dem. Med en fiskepin krypteras platserna
+        så att inte ens den som administrerar databasen kan läsa dem.
+      </p>
+
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2 mb-3">
+        <p className="text-xs text-amber-700 dark:text-amber-300">
+          Glömmer du pinkoden går platsdata inte att återställa.
+        </p>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-xl text-xs mb-3">{error}</div>
+      )}
+      {message && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-xl text-xs mb-3">{message}</div>
+      )}
+
+      {hasPinSet ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-green-600 font-medium">Fiskepin aktiv</span>
+            {isUnlocked && (
+              <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Upplåst</span>
+            )}
+          </div>
+
+          {isUnlocked && (
+            <button
+              onClick={handleEncryptExisting}
+              disabled={encrypting}
+              className="w-full py-2.5 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 transition"
+            >
+              {encrypting
+                ? `Krypterar ${encryptProgress.current} av ${encryptProgress.total}...`
+                : 'Kryptera befintliga fångster'
+              }
+            </button>
+          )}
+
+          <button
+            onClick={handleRemovePin}
+            disabled={removing}
+            className="w-full py-2 text-xs text-red-500 font-medium rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+          >
+            {removing ? 'Tar bort...' : 'Ta bort fiskepin'}
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={pinInput}
+            onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))}
+            placeholder="Ny PIN (4-6 siffror)"
+            className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-700"
+          />
+          <input
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={6}
+            value={confirmInput}
+            onChange={e => setConfirmInput(e.target.value.replace(/\D/g, ''))}
+            placeholder="Bekräfta PIN"
+            className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-transparent focus:outline-none focus:ring-2 focus:ring-primary-700"
+          />
+          <button
+            onClick={handleSetPin}
+            disabled={saving || pinInput.length < 4}
+            className="w-full py-2.5 text-sm font-medium rounded-xl bg-primary-700 text-white hover:bg-primary-800 disabled:opacity-40 transition"
+          >
+            {saving ? 'Sparar...' : 'Spara fiskepin'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

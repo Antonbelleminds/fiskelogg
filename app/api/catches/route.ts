@@ -145,9 +145,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const admin = createAdminClient()
 
-    // Build location point if coordinates exist
+    // Build location point if coordinates exist (and not encrypted)
+    const isEncrypted = body.location_encrypted === true
     let location = null
-    if (body.lat && body.lng) {
+    if (!isEncrypted && body.lat && body.lng) {
       location = `POINT(${body.lng} ${body.lat})`
     }
 
@@ -163,8 +164,8 @@ export async function POST(req: NextRequest) {
         weight_kg: body.weight_kg || null,
         length_cm: body.length_cm || null,
         location: location,
-        location_name: body.location_name || null,
-        water_body: body.water_body || null,
+        location_name: isEncrypted ? null : (body.location_name || null),
+        water_body: isEncrypted ? null : (body.water_body || null),
         fishing_method: body.fishing_method || null,
         lure_type: body.lure_type || null,
         lure_color: body.lure_color || null,
@@ -193,8 +194,12 @@ export async function POST(req: NextRequest) {
         image_url: body.image_url || null,
         image_path: body.image_path || null,
         exif_captured_at: body.exif_captured_at || null,
-        exif_lat: body.lat || null,
-        exif_lng: body.lng || null,
+        exif_lat: isEncrypted ? null : (body.lat || null),
+        exif_lng: isEncrypted ? null : (body.lng || null),
+        // Fiskepin encryption fields
+        location_encrypted: isEncrypted,
+        encrypted_location: isEncrypted ? body.encrypted_location : null,
+        encryption_iv: isEncrypted ? body.encryption_iv : null,
       })
       .select()
       .single()

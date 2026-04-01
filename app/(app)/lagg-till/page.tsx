@@ -7,9 +7,11 @@ import { extractExif } from '@/lib/exif'
 import CatchForm, { getDefaultFormData, SPECIES_OPTIONS, type CatchFormData } from '@/components/catches/CatchForm'
 import type { ImageAnalysis } from '@/types/database'
 import { invalidateCache } from '@/lib/cache'
+import { usePin } from '@/contexts/PinContext'
 
 export default function AddCatchPage() {
   const router = useRouter()
+  const { hasPinSet, isUnlocked, encrypt } = usePin()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [step, setStep] = useState<'image' | 'form'>('image')
   const [imageFile, setImageFile] = useState<File | null>(null)
@@ -174,6 +176,25 @@ export default function AddCatchPage() {
         }
       }
 
+      // Encrypt location if fiskepin is active
+      let encryptionFields: Record<string, unknown> = {}
+      if (hasPinSet && isUnlocked && data.lat) {
+        const encrypted = await encrypt({
+          exif_lat: data.lat, exif_lng: data.lng,
+          location_name: data.location_name || null,
+          water_body: data.water_body || null,
+        })
+        if (encrypted) {
+          encryptionFields = {
+            location_encrypted: true,
+            encrypted_location: encrypted.encrypted_location,
+            encryption_iv: encrypted.encryption_iv,
+          }
+        }
+      }
+
+      const isEncrypted = !!encryptionFields.location_encrypted
+
       const catchBody = {
         caught_at: data.caught_at || new Date().toISOString(),
         species: data.species || null,
@@ -182,10 +203,11 @@ export default function AddCatchPage() {
         length_cm: data.length_cm ? parseFloat(data.length_cm) : null,
         depth_m: data.depth_m ? parseFloat(data.depth_m) : null,
         water_temp_c: data.water_temp_c ? parseFloat(data.water_temp_c as string) : null,
-        lat: data.lat || null,
-        lng: data.lng || null,
-        location_name: data.location_name || null,
-        water_body: data.water_body || null,
+        lat: isEncrypted ? null : (data.lat || null),
+        lng: isEncrypted ? null : (data.lng || null),
+        location_name: isEncrypted ? null : (data.location_name || null),
+        water_body: isEncrypted ? null : (data.water_body || null),
+        ...encryptionFields,
         fishing_method: data.fishing_method || null,
         lure_type: data.lure_type || null,
         lure_color: data.lure_color || null,
