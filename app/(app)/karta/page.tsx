@@ -184,6 +184,7 @@ export default function KartaPage() {
             id: c.id,
             species: c.species || 'Okänd',
             weight_kg: c.weight_kg || 0,
+            length_cm: c.length_cm || 0,
             caught_at: c.caught_at,
             water_body: c.water_body || '',
           },
@@ -198,6 +199,7 @@ export default function KartaPage() {
             id: c.id,
             species: c.species || 'Okänd',
             weight_kg: c.weight_kg || 0,
+            length_cm: c.length_cm || 0,
             caught_at: c.caught_at,
             water_body: c.water_body || '',
             friend_name: c.profiles?.display_name || c.profiles?.username || 'Vän',
@@ -379,11 +381,16 @@ export default function KartaPage() {
         map.on('click', 'unclustered-point', (e) => {
           const props = e.features![0].properties!
           const coords = (e.features![0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
+          const details = [
+            props.weight_kg ? `${props.weight_kg} kg` : '',
+            props.length_cm ? `${props.length_cm} cm` : '',
+          ].filter(Boolean).join(' · ')
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
                 <div style="font-weight:600">${props.species}</div>
-                ${props.weight_kg ? `<div style="font-size:13px;color:#64748b">${props.weight_kg} kg</div>` : ''}
+                ${details ? `<div style="font-size:13px;color:#64748b">${details}</div>` : ''}
+                ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${props.water_body}</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
                 <a href="/fangst/${props.id}" style="display:block;margin-top:6px;font-size:12px;color:#27272a;text-decoration:none;font-weight:500">Visa detaljer &rarr;</a>
               </div>
@@ -396,12 +403,17 @@ export default function KartaPage() {
         map.on('click', 'friend-unclustered-point', (e) => {
           const props = e.features![0].properties!
           const coords = (e.features![0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
+          const details = [
+            props.weight_kg ? `${props.weight_kg} kg` : '',
+            props.length_cm ? `${props.length_cm} cm` : '',
+          ].filter(Boolean).join(' · ')
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
                 <div style="font-size:11px;color:#64748b;font-weight:500;margin-bottom:2px">${props.friend_name}</div>
                 <div style="font-weight:600">${props.species}</div>
-                ${props.weight_kg ? `<div style="font-size:13px;color:#64748b">${props.weight_kg} kg</div>` : ''}
+                ${details ? `<div style="font-size:13px;color:#64748b">${details}</div>` : ''}
+                ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${props.water_body}</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
               </div>
             </div>
@@ -484,7 +496,7 @@ export default function KartaPage() {
   const shownCount = filteredIds !== null ? filteredIds.length : totalWithCoords
 
   return (
-    <div className="relative h-[calc(100dvh-5rem)]">
+    <div className="relative h-[calc(100dvh-8.75rem)]">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-slate-50 dark:bg-slate-900 z-10">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-700" />
@@ -494,7 +506,7 @@ export default function KartaPage() {
       <div ref={mapContainer} className="w-full h-full" />
 
       {/* Search bar */}
-      <div className="absolute top-4 left-14 right-14 z-10">
+      <div className="absolute top-3 left-14 right-14 z-10">
         <form onSubmit={handleSearch} className="flex gap-2">
           <div className="relative flex-1">
             <input
