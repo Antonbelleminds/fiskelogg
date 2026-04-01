@@ -154,12 +154,12 @@ export default function VaderPage() {
         fetch(`/api/moon?date=${dateNow}`),
       ])
 
-      if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
-        const data: WeatherData = await weatherRes.value.json()
-        setWeather(data)
-      } else {
+      if (weatherRes.status !== 'fulfilled' || !weatherRes.value.ok) {
         throw new Error('Kunde inte hämta väder')
       }
+
+      const weatherData: WeatherData = await weatherRes.value.json()
+      setWeather(weatherData)
 
       const sm: SunMoonData = { sunrise_time: null, sunset_time: null, moon_phase: null, moon_illumination_pct: null }
       if (sunRes.status === 'fulfilled' && sunRes.value.ok) {
@@ -175,35 +175,30 @@ export default function VaderPage() {
       setSunMoon(sm)
 
       // Kick off AI fishing forecast in background (non-blocking)
-      if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
-        const weatherData: WeatherData = await (weatherRes.value.clone()).json().catch(() => null)
-        if (weatherData) {
-          const trend = overallTrend(weatherData.history)
-          const trendKey: 'stigande' | 'fallande' | 'stabilt' =
-            trend.text.includes('Stigande') ? 'stigande' :
-            trend.text.includes('Fallande') ? 'fallande' : 'stabilt'
+      const trend = overallTrend(weatherData.history)
+      const trendKey: 'stigande' | 'fallande' | 'stabilt' =
+        trend.text.includes('Stigande') ? 'stigande' :
+        trend.text.includes('Fallande') ? 'fallande' : 'stabilt'
 
-          setForecastLoading(true)
-          fetch('/api/fishing-forecast', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              pressure_hpa: weatherData.current.pressure_hpa,
-              pressure_trend: trendKey,
-              condition: weatherData.current.condition,
-              moon_phase: sm.moon_phase,
-              wind_speed_ms: weatherData.current.wind_speed_ms,
-              temp_c: weatherData.current.temp_c,
-              cloud_cover_pct: weatherData.current.cloud_cover_pct,
-              hour: new Date().getHours(),
-            }),
-          })
-            .then(r => r.ok ? r.json() : null)
-            .then(data => { if (data) setFishingForecast(data) })
-            .catch(() => {})
-            .finally(() => setForecastLoading(false))
-        }
-      }
+      setForecastLoading(true)
+      fetch('/api/fishing-forecast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pressure_hpa: weatherData.current.pressure_hpa,
+          pressure_trend: trendKey,
+          condition: weatherData.current.condition,
+          moon_phase: sm.moon_phase,
+          wind_speed_ms: weatherData.current.wind_speed_ms,
+          temp_c: weatherData.current.temp_c,
+          cloud_cover_pct: weatherData.current.cloud_cover_pct,
+          hour: new Date().getHours(),
+        }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(forecast => { if (forecast) setFishingForecast(forecast) })
+        .catch(() => {})
+        .finally(() => setForecastLoading(false))
     } catch {
       setError('Kunde inte hämta väderdata. Försök igen.')
     } finally {
