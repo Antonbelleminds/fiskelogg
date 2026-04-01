@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   try {
     // Open-Meteo Forecast API: current + 5 days history + 5 days forecast + hourly for today
     // wind_direction_10m_dominant gives the dominant wind direction per day
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,surface_pressure_mean&hourly=temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m&past_days=5&forecast_days=2&timezone=Europe/Stockholm`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,surface_pressure_mean&hourly=temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m&past_days=5&forecast_days=6&timezone=Europe/Stockholm`
 
     const res = await fetch(url)
     if (!res.ok) {
