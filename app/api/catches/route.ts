@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const species = searchParams.get('species')
     const method = searchParams.get('method')
+    const lureType = searchParams.get('lure_type')
     const sort = searchParams.get('sort') || 'caught_at'
     const publicOnly = searchParams.get('public') === 'true'
     const scope = searchParams.get('scope') || 'mine'
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
 
     if (species) query = query.eq('species', species)
     if (method) query = query.eq('fishing_method', method)
+    if (lureType) query = query.eq('lure_type', lureType)
 
     if (sort === 'weight') {
       query = query.order('weight_kg', { ascending: false, nullsFirst: false })
@@ -178,6 +180,7 @@ export async function POST(req: NextRequest) {
         ai_weather_description: body.ai_weather_description || null,
         ai_fish_description: body.ai_fish_description || null,
         ai_environment_notes: body.ai_environment_notes || null,
+        catcher_name: body.catcher_name || null,
         image_url: body.image_url || null,
         image_path: body.image_path || null,
         exif_captured_at: body.exif_captured_at || null,

@@ -6,23 +6,27 @@ interface FiltersProps {
   onFilterChange: (filters: {
     species: string
     method: string
+    lure_type: string
     sort: string
   }) => void
 }
 
-const SPECIES = ['Abborre', 'Gädda', 'Gös', 'Öring', 'Lax', 'Regnbåge', 'Röding', 'Harr', 'Lake']
+const SPECIES = ['Abborre', 'Gädda', 'Gös', 'Öring', 'Lax', 'Regnbåge', 'Röding', 'Harr', 'Lake', 'Havsöring', 'Sik', 'Braxen', 'Mört', 'Torsk', 'Makrill', 'Annat']
 const METHODS = ['Kastfiske', 'Trolling', 'Mete', 'Flugfiske', 'Isfiske', 'Jiggning']
+const LURE_TYPES = ['Wobbler', 'Jig', 'Skeddrag', 'Spinner', 'Fluga', 'Mask', 'Räka', 'Annat']
 
 export default function CatchFilters({ onFilterChange }: FiltersProps) {
   const [species, setSpecies] = useState('')
   const [method, setMethod] = useState('')
+  const [lureType, setLureType] = useState('')
   const [sort, setSort] = useState('caught_at')
   const [open, setOpen] = useState(false)
 
-  function update(updates: Partial<{ species: string; method: string; sort: string }>) {
-    const next = { species, method, sort, ...updates }
+  function update(updates: Partial<{ species: string; method: string; lure_type: string; sort: string }>) {
+    const next = { species, method, lure_type: lureType, sort, ...updates }
     if (updates.species !== undefined) setSpecies(updates.species)
     if (updates.method !== undefined) setMethod(updates.method)
+    if (updates.lure_type !== undefined) setLureType(updates.lure_type)
     if (updates.sort !== undefined) setSort(updates.sort)
     onFilterChange(next)
   }
@@ -54,7 +58,7 @@ export default function CatchFilters({ onFilterChange }: FiltersProps) {
         <button
           onClick={() => setOpen(!open)}
           className={`p-2 rounded-lg transition ${
-            (species || method) ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-500'
+            (species || method || lureType) ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-500'
           }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -87,9 +91,20 @@ export default function CatchFilters({ onFilterChange }: FiltersProps) {
               {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </div>
-          {(species || method) && (
+          <div>
+            <label className="text-xs font-medium text-slate-500 mb-1 block">Betetyp</label>
+            <select
+              value={lureType}
+              onChange={(e) => update({ lure_type: e.target.value })}
+              className="w-full text-sm px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+            >
+              <option value="">Alla beten</option>
+              {LURE_TYPES.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          {(species || method || lureType) && (
             <button
-              onClick={() => update({ species: '', method: '' })}
+              onClick={() => update({ species: '', method: '', lure_type: '' })}
               className="text-xs text-primary-700 font-medium"
             >
               Rensa filter

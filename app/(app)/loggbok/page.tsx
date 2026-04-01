@@ -10,7 +10,7 @@ export default function LoggbokPage() {
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(true)
-  const [filters, setFilters] = useState({ species: '', method: '', sort: 'caught_at' })
+  const [filters, setFilters] = useState({ species: '', method: '', lure_type: '', sort: 'caught_at' })
 
   const fetchCatches = useCallback(async (pageNum: number, reset = false) => {
     setLoading(true)
@@ -21,6 +21,7 @@ export default function LoggbokPage() {
     })
     if (filters.species) params.set('species', filters.species)
     if (filters.method) params.set('method', filters.method)
+    if (filters.lure_type) params.set('lure_type', filters.lure_type)
 
     const res = await fetch(`/api/catches?${params}`)
     if (res.ok) {
