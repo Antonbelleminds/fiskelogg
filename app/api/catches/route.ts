@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     const species = searchParams.get('species')
     const method = searchParams.get('method')
     const lureType = searchParams.get('lure_type')
+    const year = searchParams.get('year')
     const sort = searchParams.get('sort') || 'caught_at'
     const publicOnly = searchParams.get('public') === 'true'
     const scope = searchParams.get('scope') || 'mine'
@@ -80,6 +81,11 @@ export async function GET(req: NextRequest) {
     if (species) query = query.eq('species', species)
     if (method) query = query.eq('fishing_method', method)
     if (lureType) query = query.eq('lure_type', lureType)
+    if (year) {
+      query = query
+        .gte('caught_at', `${year}-01-01T00:00:00`)
+        .lte('caught_at', `${year}-12-31T23:59:59`)
+    }
 
     if (sort === 'weight') {
       query = query.order('weight_kg', { ascending: false, nullsFirst: false })

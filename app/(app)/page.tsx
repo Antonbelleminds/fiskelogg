@@ -23,16 +23,18 @@ export default function HomePage() {
   const [filterMethod, setFilterMethod] = useState('')
   const [filterCatcher, setFilterCatcher] = useState('')
   const [filterYear, setFilterYear] = useState('')
+  const [availableYears, setAvailableYears] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
   const pageRef = useRef(0)
   const PAGE_SIZE = 10
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-      }
+      // Fetch available years from DB (all time, not just current page)
+      fetch('/api/catches/years')
+        .then(r => r.ok ? r.json() : [])
+        .then(setAvailableYears)
+        .catch(() => {})
 
       // Use cache to avoid re-fetching on tab switch
       const cached = getCache<CatchWithProfile[]>('home-catches')
@@ -78,6 +80,29 @@ export default function HomePage() {
         .finally(() => setFriendsLoading(false))
     }
   }, [activeTab, friendsLoaded, friendsLoading])
+
+  // Re-fetch server-side when year filter changes
+  useEffect(() => {
+    async function fetchByYear() {
+      setLoading(true)
+      pageRef.current = 0
+      const params = new URLSearchParams({ limit: '50' })
+      if (filterYear) params.set('year', filterYear)
+      const res = await fetch(`/api/catches?${params}`)
+      if (res.ok) {
+        const d = await res.json()
+        const arr = Array.isArray(d) ? d : []
+        setMyCatches(arr)
+        setHasMore(arr.length >= 50)
+        // Don't cache filtered results
+        if (!filterYear) setCache('home-catches', arr)
+      }
+      setLoading(false)
+    }
+    // Only run after initial mount (availableYears is populated or filterYear changes)
+    if (activeTab === 'mine') fetchByYear()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterYear])
 
   async function loadMore() {
     setLoadingMore(true)
@@ -228,7 +253,7 @@ export default function HomePage() {
                 className="text-xs px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none"
               >
                 <option value="">Alla år</option>
-                {Array.from(new Set(myCatches.map(c => new Date(c.caught_at).getFullYear().toString()))).sort((a, b) => b.localeCompare(a)).map(y => (
+                {availableYears.map(y => (
                   <option key={y} value={y}>{y}</option>
                 ))}
               </select>
