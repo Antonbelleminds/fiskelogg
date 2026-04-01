@@ -35,9 +35,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Open-Meteo Forecast API: current + 5 days history + 5 days forecast
+    // Open-Meteo Forecast API: current + 5 days history + 5 days forecast + hourly for today
     // wind_direction_10m_dominant gives the dominant wind direction per day
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,surface_pressure_mean&past_days=5&forecast_days=6&timezone=Europe/Stockholm`
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,surface_pressure,wind_speed_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_direction_10m_dominant,cloud_cover_mean,surface_pressure_mean&hourly=temperature_2m,precipitation,cloud_cover,wind_speed_10m,wind_direction_10m&past_days=5&forecast_days=2&timezone=Europe/Stockholm`
 
     const res = await fetch(url)
     if (!res.ok) {
@@ -82,14 +82,40 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Split into history (past 5 + today) and forecast (tomorrow + 5 days)
+    // Parse hourly data for today
     const todayStr = new Date().toLocaleDateString('sv-SE') // YYYY-MM-DD
+    const h = data.hourly
+    const hourly: { time: string; temp_c: number | null; precipitation_mm: number | null; cloud_cover_pct: number | null; wind_speed_ms: number | null; wind_direction: string | null; condition: string }[] = []
+
+    if (h?.time) {
+      for (let i = 0; i < h.time.length; i++) {
+        const timeStr: string = h.time[i] // "2026-04-01T14:00"
+        if (!timeStr.startsWith(todayStr)) continue
+
+        const cloud = h.cloud_cover?.[i] ?? 0
+        const precip = h.precipitation?.[i] ?? 0
+        const windKmh = h.wind_speed_10m?.[i]
+        const windDeg = h.wind_direction_10m?.[i]
+
+        hourly.push({
+          time: timeStr.slice(11, 16), // "14:00"
+          temp_c: h.temperature_2m?.[i] ?? null,
+          precipitation_mm: precip,
+          cloud_cover_pct: cloud,
+          wind_speed_ms: windKmh != null ? Math.round(windKmh / 3.6 * 10) / 10 : null,
+          wind_direction: windDeg != null ? degreeToDirection(windDeg) : null,
+          condition: cloudToCondition(cloud, precip),
+        })
+      }
+    }
+
+    // Split into history (past 5 + today) and forecast (tomorrow+)
     const todayIndex = allDays.findIndex(day => day.date === todayStr)
 
     const history = todayIndex >= 0 ? allDays.slice(0, todayIndex + 1) : allDays.slice(0, 6)
     const forecast = todayIndex >= 0 ? allDays.slice(todayIndex + 1) : []
 
-    return NextResponse.json({ current, history, forecast })
+    return NextResponse.json({ current, history, forecast, hourly })
   } catch (err) {
     console.error('Weather forecast error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

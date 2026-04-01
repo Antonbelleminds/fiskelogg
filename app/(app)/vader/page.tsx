@@ -32,10 +32,21 @@ interface SunMoonData {
   moon_illumination_pct: number | null
 }
 
+interface HourlyEntry {
+  time: string
+  temp_c: number | null
+  precipitation_mm: number | null
+  cloud_cover_pct: number | null
+  wind_speed_ms: number | null
+  wind_direction: string | null
+  condition: string
+}
+
 interface WeatherData {
   current: CurrentWeather
   history: DayHistory[]
   forecast: DayHistory[]
+  hourly: HourlyEntry[]
 }
 
 const WEEKDAYS = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör']
@@ -318,6 +329,42 @@ export default function VaderPage() {
               </div>
             )}
           </div>
+
+          {/* Dagens utveckling — timvis */}
+          {weather.hourly && weather.hourly.length > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden mb-4">
+              <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700">
+                <h3 className="text-sm font-semibold">Dagens utveckling</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <div className="flex min-w-max px-2 py-3 gap-0">
+                  {weather.hourly
+                    .filter((_, i) => i % 2 === 0) // Varannan timme för att inte bli för brett
+                    .map((h) => (
+                    <div key={h.time} className="flex flex-col items-center px-2.5 min-w-[56px]">
+                      <span className="text-[10px] text-slate-400 mb-1">{h.time}</span>
+                      <span className="text-base mb-1">{conditionIcon(h.condition)}</span>
+                      <span className="text-xs font-medium">
+                        {h.temp_c != null ? `${Math.round(h.temp_c)}\u00b0` : '\u2014'}
+                      </span>
+                      {h.precipitation_mm != null && h.precipitation_mm > 0 && (
+                        <span className="text-[10px] text-blue-500 mt-0.5">{h.precipitation_mm} mm</span>
+                      )}
+                      <div className="mt-1.5 flex flex-col items-center">
+                        <WindIcon />
+                        <span className="text-[10px] text-slate-400 mt-0.5">
+                          {h.wind_speed_ms != null ? `${h.wind_speed_ms}` : ''}
+                        </span>
+                        {h.wind_direction && (
+                          <span className="text-[10px] text-slate-400">{h.wind_direction}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Trycktrend */}
           {trend && trend.text && (
