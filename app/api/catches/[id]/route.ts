@@ -22,6 +22,36 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Åtkomst nekad' }, { status: 403 })
     }
 
+    // Strip location data if the viewer is NOT the owner
+    if (user && data.user_id !== user.id) {
+      let canSeeLocation = false
+
+      // Check if they are friends with share_location=true
+      const { data: friendship } = await admin
+        .from('friendships')
+        .select('share_location')
+        .eq('status', 'accepted')
+        .or(
+          `and(requester_id.eq.${user.id},addressee_id.eq.${data.user_id}),` +
+          `and(requester_id.eq.${data.user_id},addressee_id.eq.${user.id})`
+        )
+        .maybeSingle()
+
+      if (friendship?.share_location) {
+        canSeeLocation = true
+      }
+
+      if (!canSeeLocation) {
+        data.exif_lat = null
+        data.exif_lng = null
+        data.lat = null
+        data.lng = null
+        data.location = null
+        data.location_name = null
+        data.water_body = null
+      }
+    }
+
     return NextResponse.json(data)
   } catch (error) {
     console.error('Get catch error:', error)

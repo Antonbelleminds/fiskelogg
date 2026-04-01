@@ -104,22 +104,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Kunde inte hämta fångster' }, { status: 500 })
     }
 
-    // If scope=friends, strip location data for friends with share_location=false
+    // Strip location data for catches that are not the user's own,
+    // unless the owner is a friend with share_location=true
     let result = data || []
-    if (scope === 'friends') {
+    if (scope !== 'mine') {
       result = result.map((c) => {
+        if (c.user_id === user.id) return c // own catch, keep everything
+
         const shareLocation = friendShareLocationMap.get(c.user_id)
-        if (shareLocation === false) {
-          return {
-            ...c,
-            exif_lat: null,
-            exif_lng: null,
-            location: null,
-            location_name: null,
-            water_body: null,
-          }
+        if (shareLocation === true) return c // friend with location sharing on
+
+        // Otherwise strip all location data
+        return {
+          ...c,
+          exif_lat: null,
+          exif_lng: null,
+          location: null,
+          location_name: null,
+          water_body: null,
         }
-        return c
       })
     }
 
