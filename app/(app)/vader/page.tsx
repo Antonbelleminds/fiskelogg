@@ -25,6 +25,13 @@ interface DayHistory {
   condition: string
 }
 
+interface FishingForecast {
+  rating: 'bra' | 'medelbra' | 'dåligt' | 'okänt'
+  insight: string
+  stats: { label: string; value: string }[]
+  total: number
+}
+
 interface SunMoonData {
   sunrise_time: string | null
   sunset_time: string | null
@@ -131,6 +138,8 @@ export default function VaderPage() {
   const [locating, setLocating] = useState(false)
   const [weather, setWeather] = useState<WeatherData | null>(null)
   const [sunMoon, setSunMoon] = useState<SunMoonData | null>(null)
+  const [fishingForecast, setFishingForecast] = useState<FishingForecast | null>(null)
+  const [forecastLoading, setForecastLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function fetchWeather(lat: number, lng: number) {
@@ -164,6 +173,37 @@ export default function VaderPage() {
         sm.moon_illumination_pct = m.moon_illumination_pct ?? null
       }
       setSunMoon(sm)
+
+      // Kick off AI fishing forecast in background (non-blocking)
+      if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
+        const weatherData: WeatherData = await (weatherRes.value.clone()).json().catch(() => null)
+        if (weatherData) {
+          const trend = overallTrend(weatherData.history)
+          const trendKey: 'stigande' | 'fallande' | 'stabilt' =
+            trend.text.includes('Stigande') ? 'stigande' :
+            trend.text.includes('Fallande') ? 'fallande' : 'stabilt'
+
+          setForecastLoading(true)
+          fetch('/api/fishing-forecast', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pressure_hpa: weatherData.current.pressure_hpa,
+              pressure_trend: trendKey,
+              condition: weatherData.current.condition,
+              moon_phase: sm.moon_phase,
+              wind_speed_ms: weatherData.current.wind_speed_ms,
+              temp_c: weatherData.current.temp_c,
+              cloud_cover_pct: weatherData.current.cloud_cover_pct,
+              hour: new Date().getHours(),
+            }),
+          })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (data) setFishingForecast(data) })
+            .catch(() => {})
+            .finally(() => setForecastLoading(false))
+        }
+      }
     } catch {
       setError('Kunde inte hämta väderdata. Försök igen.')
     } finally {
@@ -377,6 +417,76 @@ export default function VaderPage() {
             </div>
           )}
 
+          {/* AI fiskeprognos */}
+          {(forecastLoading || fishingForecast) && (
+            <div className="mb-4">
+              {forecastLoading && !fishingForecast ? (
+                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-700 shrink-0" />
+                  <span className="text-sm text-slate-500">Analyserar dina fångster...</span>
+                </div>
+              ) : fishingForecast && (
+                <div className={`rounded-2xl border p-5 ${
+                  fishingForecast.rating === 'bra'
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                    : fishingForecast.rating === 'medelbra'
+                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                    : fishingForecast.rating === 'dåligt'
+                    ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+                    : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+                }`}>
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <FishIcon className={
+                        fishingForecast.rating === 'bra' ? 'text-green-700 dark:text-green-300' :
+                        fishingForecast.rating === 'medelbra' ? 'text-amber-700 dark:text-amber-300' :
+                        fishingForecast.rating === 'dåligt' ? 'text-red-600 dark:text-red-400' :
+                        'text-slate-500'
+                      } />
+                      <span className={`text-sm font-semibold ${
+                        fishingForecast.rating === 'bra' ? 'text-green-800 dark:text-green-200' :
+                        fishingForecast.rating === 'medelbra' ? 'text-amber-800 dark:text-amber-200' :
+                        fishingForecast.rating === 'dåligt' ? 'text-red-700 dark:text-red-300' :
+                        'text-slate-700 dark:text-slate-300'
+                      }`}>
+                        Fiskeprognos — {
+                          fishingForecast.rating === 'bra' ? 'Bra dag för fiske' :
+                          fishingForecast.rating === 'medelbra' ? 'Medelbra dag för fiske' :
+                          fishingForecast.rating === 'dåligt' ? 'Dålig dag för fiske' :
+                          'Behöver mer data'
+                        }
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">{fishingForecast.total} fångster</span>
+                  </div>
+
+                  {/* AI-text */}
+                  <p className={`text-sm leading-relaxed mb-4 ${
+                    fishingForecast.rating === 'bra' ? 'text-green-800 dark:text-green-200' :
+                    fishingForecast.rating === 'medelbra' ? 'text-amber-800 dark:text-amber-200' :
+                    fishingForecast.rating === 'dåligt' ? 'text-red-700 dark:text-red-300' :
+                    'text-slate-600 dark:text-slate-400'
+                  }`}>
+                    {fishingForecast.insight}
+                  </p>
+
+                  {/* Statistikpills */}
+                  {fishingForecast.stats.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {fishingForecast.stats.map((s, i) => (
+                        <div key={i} className="bg-white/60 dark:bg-black/20 rounded-xl px-3 py-1.5">
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{s.label} </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Senaste dagarna */}
           <DayTable title="Senaste dagarna" days={weather.history} />
 
@@ -471,6 +581,14 @@ function LocationIcon() {
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+    </svg>
+  )
+}
+
+function FishIcon({ className }: { className?: string }) {
+  return (
+    <svg className={`w-4 h-4 ${className ?? ''}`} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
     </svg>
   )
 }
