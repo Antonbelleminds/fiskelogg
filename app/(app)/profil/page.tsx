@@ -12,6 +12,7 @@ interface TeamMember {
   user_id: string
   role: string
   name: string
+  status: string
 }
 
 interface TeamWithMeta {
@@ -21,6 +22,7 @@ interface TeamWithMeta {
   member_count: number
   members: TeamMember[]
   my_role: string
+  my_status: string
 }
 
 export default function ProfilPage() {
@@ -230,6 +232,24 @@ export default function ProfilPage() {
 
   const [addingMember, setAddingMember] = useState<string | null>(null)
   const [teamError, setTeamError] = useState('')
+
+  async function removeMember(teamId: string, memberUserId: string) {
+    await fetch(`/api/teams/${teamId}/members`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: memberUserId }),
+    })
+    await loadTeams()
+  }
+
+  async function respondToInvite(teamId: string, action: 'accept' | 'decline') {
+    await fetch(`/api/teams/${teamId}/members`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    })
+    await loadTeams()
+  }
 
   async function addFriendToTeam(teamId: string, friendUserId: string) {
     setAddingMember(`${teamId}-${friendUserId}`)
@@ -520,104 +540,173 @@ export default function ProfilPage() {
           </button>
         </div>
 
-        {teams.length > 0 ? (
-          <div className="space-y-3">
-            {teams.map((t) => (
-              <div
-                key={t.id}
-                className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <div className="font-medium text-sm">{t.name}</div>
-                    <div className="text-xs text-slate-500">
-                      {t.member_count} {t.member_count === 1 ? 'medlem' : 'medlemmar'}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {t.created_by === userId ? (
-                      <button
-                        onClick={() => deleteTeam(t.id)}
-                        className="text-xs text-red-500 hover:text-red-700"
-                      >
-                        Ta bort
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => leaveTeam(t.id)}
-                        className="text-xs text-red-500 hover:text-red-700"
-                      >
-                        Lämna
-                      </button>
-                    )}
-                  </div>
+        {/* Pending invites */}
+        {teams.filter(t => t.my_status === 'pending').length > 0 && (
+          <div className="mb-3 space-y-2">
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">Inbjudningar</div>
+            {teams.filter(t => t.my_status === 'pending').map(t => (
+              <div key={t.id} className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
+                <div className="text-sm font-medium mb-1">{t.name}</div>
+                <div className="text-xs text-slate-500 mb-2">
+                  {t.member_count} {t.member_count === 1 ? 'medlem' : 'medlemmar'}
                 </div>
-
-                {/* Current members */}
-                {t.members && t.members.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                    <div className="text-xs text-slate-500 mb-1.5">Medlemmar:</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {t.members.map((m) => (
-                        <span
-                          key={m.user_id}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
-                        >
-                          <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
-                          </svg>
-                          <span className="dark:text-slate-300">{m.name}</span>
-                          {m.role === 'admin' && <span className="text-[9px] text-amber-500 font-medium">Admin</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Add friend to team - only show friends NOT already in the team */}
-                {(() => {
-                  const memberIds = new Set((t.members || []).map(m => m.user_id))
-                  const friendsNotInTeam = acceptedFriends.filter(f => {
-                    const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
-                    return !memberIds.has(friendUserId)
-                  })
-                  if (friendsNotInTeam.length === 0) return null
-                  return (
-                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                      <div className="text-xs text-slate-500 mb-1">Lägg till vän i laget:</div>
-                      {teamError && <p className="text-xs text-red-500 mb-1">{teamError}</p>}
-                      <div className="flex flex-wrap gap-1">
-                        {friendsNotInTeam.map((f) => {
-                          const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
-                          const isAdding = addingMember === `${t.id}-${friendUserId}`
-                          return (
-                            <button
-                              key={f.id}
-                              onClick={() => addFriendToTeam(t.id, friendUserId)}
-                              disabled={isAdding}
-                              className="px-2 py-1 text-xs rounded-md bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition disabled:opacity-50"
-                            >
-                              {isAdding ? (
-                                <span className="flex items-center gap-1">
-                                  <span className="w-3 h-3 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
-                                  Lägger till...
-                                </span>
-                              ) : (
-                                `+ ${f.friend_profile?.display_name || f.friend_profile?.username}`
-                              )}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })()}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => respondToInvite(t.id, 'accept')}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg bg-primary-700 text-white hover:bg-primary-800 transition"
+                  >
+                    Acceptera
+                  </button>
+                  <button
+                    onClick={() => respondToInvite(t.id, 'decline')}
+                    className="px-3 py-1.5 text-xs font-medium rounded-lg text-red-500 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                  >
+                    Avvisa
+                  </button>
+                </div>
               </div>
             ))}
           </div>
-        ) : (
-          <p className="text-sm text-slate-500">Inga lag ännu. Skapa ett!</p>
         )}
+
+        {/* Accepted teams */}
+        {teams.filter(t => t.my_status === 'accepted').length > 0 ? (
+          <div className="space-y-3">
+            {teams.filter(t => t.my_status === 'accepted').map((t) => {
+              const isAdmin = t.created_by === userId
+              const acceptedMembers = t.members.filter(m => m.status === 'accepted')
+              const pendingMembers = t.members.filter(m => m.status === 'pending')
+
+              return (
+                <div
+                  key={t.id}
+                  className="bg-white dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <div className="font-medium text-sm">{t.name}</div>
+                      <div className="text-xs text-slate-500">
+                        {t.member_count} {t.member_count === 1 ? 'medlem' : 'medlemmar'}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      {isAdmin ? (
+                        <button
+                          onClick={() => deleteTeam(t.id)}
+                          className="text-xs text-red-500 hover:text-red-700"
+                        >
+                          Ta bort lag
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => leaveTeam(t.id)}
+                          className="text-xs text-red-500 hover:text-red-700"
+                        >
+                          Lämna
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Accepted members */}
+                  {acceptedMembers.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                      <div className="text-xs text-slate-500 mb-1.5">Medlemmar:</div>
+                      <div className="space-y-1">
+                        {acceptedMembers.map((m) => (
+                          <div
+                            key={m.user_id}
+                            className="flex items-center justify-between px-2 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-700"
+                          >
+                            <span className="inline-flex items-center gap-1">
+                              <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" />
+                              </svg>
+                              <span className="dark:text-slate-300">{m.name}</span>
+                              {m.role === 'admin' && <span className="text-[9px] text-amber-500 font-medium">Admin</span>}
+                            </span>
+                            {isAdmin && m.user_id !== userId && (
+                              <button
+                                onClick={() => removeMember(t.id, m.user_id)}
+                                className="text-[10px] text-red-400 hover:text-red-600 ml-2"
+                              >
+                                Ta bort
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pending invites (visible to admin) */}
+                  {isAdmin && pendingMembers.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                      <div className="text-xs text-slate-500 mb-1.5">Väntande inbjudningar:</div>
+                      <div className="space-y-1">
+                        {pendingMembers.map((m) => (
+                          <div
+                            key={m.user_id}
+                            className="flex items-center justify-between px-2 py-1.5 text-xs rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800"
+                          >
+                            <span className="text-amber-700 dark:text-amber-300">{m.name} (inbjuden)</span>
+                            <button
+                              onClick={() => removeMember(t.id, m.user_id)}
+                              className="text-[10px] text-red-400 hover:text-red-600"
+                            >
+                              Avbryt
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add friend to team - only show friends NOT already in the team */}
+                  {isAdmin && (() => {
+                    const memberIds = new Set((t.members || []).map(m => m.user_id))
+                    const friendsNotInTeam = acceptedFriends.filter(f => {
+                      const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
+                      return !memberIds.has(friendUserId)
+                    })
+                    if (friendsNotInTeam.length === 0) return null
+                    return (
+                      <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                        <div className="text-xs text-slate-500 mb-1">Bjud in vän till laget:</div>
+                        {teamError && <p className="text-xs text-red-500 mb-1">{teamError}</p>}
+                        <div className="flex flex-wrap gap-1">
+                          {friendsNotInTeam.map((f) => {
+                            const friendUserId = f.requester_id === userId ? f.addressee_id : f.requester_id
+                            const isAdding = addingMember === `${t.id}-${friendUserId}`
+                            return (
+                              <button
+                                key={f.id}
+                                onClick={() => addFriendToTeam(t.id, friendUserId)}
+                                disabled={isAdding}
+                                className="px-2 py-1 text-xs rounded-md bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800 hover:bg-primary-100 dark:hover:bg-primary-900/40 transition disabled:opacity-50"
+                              >
+                                {isAdding ? (
+                                  <span className="flex items-center gap-1">
+                                    <span className="w-3 h-3 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+                                    Bjuder in...
+                                  </span>
+                                ) : (
+                                  `+ ${f.friend_profile?.display_name || f.friend_profile?.username}`
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )
+            })}
+          </div>
+        ) : teams.filter(t => t.my_status === 'pending').length === 0 ? (
+          <p className="text-sm text-slate-500">Inga lag ännu. Skapa ett!</p>
+        ) : null}
       </div>
 
       {/* Logout */}

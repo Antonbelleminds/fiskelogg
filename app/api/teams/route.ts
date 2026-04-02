@@ -12,10 +12,10 @@ export async function GET() {
 
     const admin = createAdminClient()
 
-    // Get teams where user is a member
+    // Get teams where user is a member (accepted or pending)
     const { data: memberships, error: memberError } = await admin
       .from('team_members')
-      .select('team_id, role')
+      .select('team_id, role, status')
       .eq('user_id', user.id)
 
     if (memberError) {
@@ -29,6 +29,7 @@ export async function GET() {
 
     const teamIds = memberships.map((m) => m.team_id)
     const roleMap = new Map(memberships.map((m) => [m.team_id, m.role]))
+    const statusMap = new Map(memberships.map((m) => [m.team_id, (m as { status?: string }).status || 'accepted']))
 
     const { data: teams, error: teamError } = await admin
       .from('teams')
@@ -40,10 +41,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Kunde inte hämta lag' }, { status: 500 })
     }
 
-    // Get all members for each team
+    // Get all members for each team (include status)
     const { data: allMembers } = await admin
       .from('team_members')
-      .select('team_id, user_id, role')
+      .select('team_id, user_id, role, status')
       .in('team_id', teamIds)
 
     // Get profiles for all member user_ids
@@ -56,23 +57,30 @@ export async function GET() {
 
     const profileMap = new Map(memberProfiles.map(p => [p.id, p]))
 
-    const memberMap: Record<string, { user_id: string; role: string; name: string }[]> = {}
+    const memberMap: Record<string, { user_id: string; role: string; name: string; status: string }[]> = {}
     ;(allMembers || []).forEach((m) => {
       if (!memberMap[m.team_id]) memberMap[m.team_id] = []
       const profile = profileMap.get(m.user_id)
+      const status = (m as { status?: string }).status || 'accepted'
       memberMap[m.team_id].push({
         user_id: m.user_id,
         role: m.role,
         name: profile?.display_name || profile?.username || 'Okänd',
+        status,
       })
     })
 
-    const result = (teams || []).map((t) => ({
-      ...t,
-      member_count: (memberMap[t.id] || []).length,
-      members: memberMap[t.id] || [],
-      my_role: roleMap.get(t.id) || 'member',
-    }))
+    const result = (teams || []).map((t) => {
+      const members = memberMap[t.id] || []
+      const acceptedMembers = members.filter(m => m.status === 'accepted')
+      return {
+        ...t,
+        member_count: acceptedMembers.length,
+        members,
+        my_role: roleMap.get(t.id) || 'member',
+        my_status: statusMap.get(t.id) || 'accepted',
+      }
+    })
 
     return NextResponse.json(result)
   } catch (error) {
