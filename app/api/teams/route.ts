@@ -40,20 +40,37 @@ export async function GET() {
       return NextResponse.json({ error: 'Kunde inte hämta lag' }, { status: 500 })
     }
 
-    // Get member counts
-    const { data: counts } = await admin
+    // Get all members for each team
+    const { data: allMembers } = await admin
       .from('team_members')
-      .select('team_id')
+      .select('team_id, user_id, role')
       .in('team_id', teamIds)
 
-    const countMap: Record<string, number> = {}
-    ;(counts || []).forEach((c) => {
-      countMap[c.team_id] = (countMap[c.team_id] || 0) + 1
+    // Get profiles for all member user_ids
+    const memberUserIds = Array.from(new Set((allMembers || []).map(m => m.user_id)))
+    let memberProfiles: { id: string; display_name: string | null; username: string | null }[] = []
+    if (memberUserIds.length > 0) {
+      const { data } = await admin.from('profiles').select('id, display_name, username').in('id', memberUserIds)
+      memberProfiles = (data || []) as typeof memberProfiles
+    }
+
+    const profileMap = new Map(memberProfiles.map(p => [p.id, p]))
+
+    const memberMap: Record<string, { user_id: string; role: string; name: string }[]> = {}
+    ;(allMembers || []).forEach((m) => {
+      if (!memberMap[m.team_id]) memberMap[m.team_id] = []
+      const profile = profileMap.get(m.user_id)
+      memberMap[m.team_id].push({
+        user_id: m.user_id,
+        role: m.role,
+        name: profile?.display_name || profile?.username || 'Okänd',
+      })
     })
 
     const result = (teams || []).map((t) => ({
       ...t,
-      member_count: countMap[t.id] || 0,
+      member_count: (memberMap[t.id] || []).length,
+      members: memberMap[t.id] || [],
       my_role: roleMap.get(t.id) || 'member',
     }))
 
