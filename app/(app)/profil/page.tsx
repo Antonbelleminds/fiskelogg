@@ -276,8 +276,16 @@ export default function ProfilPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-700" />
+      <div className="max-w-lg mx-auto px-4 pt-6 animate-pulse">
+        <div className="flex items-center gap-4 mb-6">
+          <div className="w-16 h-16 rounded-full bg-slate-200 dark:bg-slate-700" />
+          <div>
+            <div className="h-5 w-28 bg-slate-200 dark:bg-slate-700 rounded mb-2" />
+            <div className="h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded" />
+          </div>
+        </div>
+        <div className="h-20 bg-slate-200 dark:bg-slate-700 rounded-xl mb-4" />
+        <div className="h-32 bg-slate-200 dark:bg-slate-700 rounded-xl" />
       </div>
     )
   }

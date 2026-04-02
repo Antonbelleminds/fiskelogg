@@ -7,7 +7,7 @@
 type Entry<T> = { data: T; at: number }
 const store = new Map<string, Entry<unknown>>()
 
-const TTL = 2 * 60 * 1000 // 2 minutes
+const TTL = 10 * 60 * 1000 // 10 minutes
 
 export function getCache<T>(key: string): T | null {
   const e = store.get(key) as Entry<T> | undefined
