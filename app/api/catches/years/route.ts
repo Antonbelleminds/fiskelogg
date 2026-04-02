@@ -22,7 +22,9 @@ export async function GET() {
       new Set((data || []).map(r => new Date(r.caught_at).getFullYear().toString()))
     ).sort((a, b) => b.localeCompare(a))
 
-    return NextResponse.json(years)
+    return NextResponse.json(years, {
+      headers: { 'Cache-Control': 'private, max-age=300' }, // 5 min
+    })
   } catch {
     return NextResponse.json({ error: 'Serverfel' }, { status: 500 })
   }

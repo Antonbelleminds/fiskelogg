@@ -195,7 +195,7 @@ export default function CatchDetailPage() {
 
         {c.image_url && (
           <div className="aspect-[4/3] overflow-hidden mb-4">
-            <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" />
+            <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" loading="lazy" />
           </div>
         )}
 
@@ -229,7 +229,7 @@ export default function CatchDetailPage() {
       {/* Image */}
       {c.image_url && (
         <div className="aspect-[4/3] overflow-hidden mt-2">
-          <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" />
+          <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" loading="lazy" />
         </div>
       )}
 

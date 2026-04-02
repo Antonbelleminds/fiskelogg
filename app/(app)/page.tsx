@@ -34,11 +34,16 @@ export default function HomePage() {
 
   useEffect(() => {
     async function load() {
-      // Fetch available years from DB (all time, not just current page)
-      fetch('/api/catches/years')
-        .then(r => r.ok ? r.json() : [])
-        .then(setAvailableYears)
-        .catch(() => {})
+      // Fetch available years from DB (cached 10 min)
+      const cachedYears = getCache<string[]>('available-years')
+      if (cachedYears) {
+        setAvailableYears(cachedYears)
+      } else {
+        fetch('/api/catches/years')
+          .then(r => r.ok ? r.json() : [])
+          .then((years: string[]) => { setAvailableYears(years); setCache('available-years', years) })
+          .catch(() => {})
+      }
 
       // Use cache to avoid re-fetching on tab switch
       const cached = getCache<CatchWithProfile[]>('home-catches')

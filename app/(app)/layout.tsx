@@ -30,8 +30,19 @@ function PinGate({ children }: { children: React.ReactNode }) {
   const [attempts, setAttempts] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
-  // Load pin_hash/pin_salt from profile on mount
+  // Load pin_hash/pin_salt from profile on mount (cached to avoid blocking)
   useEffect(() => {
+    // Check sessionStorage first (instant)
+    const cached = sessionStorage.getItem('fiskepin-profile')
+    if (cached) {
+      try {
+        const { pin_hash, pin_salt } = JSON.parse(cached)
+        if (pin_hash && pin_salt) setProfilePin(pin_hash, pin_salt)
+        setLoaded(true)
+        return
+      } catch {}
+    }
+
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setLoaded(true); return }
@@ -40,7 +51,10 @@ function PinGate({ children }: { children: React.ReactNode }) {
         .select('pin_hash, pin_salt')
         .eq('id', user.id)
         .single()
-      if (data) setProfilePin(data.pin_hash, data.pin_salt)
+      if (data) {
+        setProfilePin(data.pin_hash, data.pin_salt)
+        sessionStorage.setItem('fiskepin-profile', JSON.stringify({ pin_hash: data.pin_hash, pin_salt: data.pin_salt }))
+      }
       setLoaded(true)
     })
   }, [setProfilePin])

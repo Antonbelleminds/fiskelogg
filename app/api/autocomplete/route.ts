@@ -39,7 +39,9 @@ export async function GET(req: NextRequest) {
       )
     ).sort((a, b) => a.localeCompare(b, 'sv'))
 
-    return NextResponse.json(values)
+    return NextResponse.json(values, {
+      headers: { 'Cache-Control': 'private, max-age=120' }, // 2 min
+    })
   } catch (error) {
     console.error('Autocomplete error:', error)
     return NextResponse.json({ error: 'Serverfel' }, { status: 500 })

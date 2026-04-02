@@ -146,6 +146,21 @@ export default function VaderPage() {
     setLoading(true)
     setError('')
     try {
+      // Check cache first (30 min TTL)
+      const cacheKey = `weather-${lat.toFixed(2)}-${lng.toFixed(2)}`
+      const cached = sessionStorage.getItem(cacheKey)
+      if (cached) {
+        try {
+          const { weather: w, sunMoon: sm, ts } = JSON.parse(cached)
+          if (Date.now() - ts < 30 * 60 * 1000) {
+            setWeather(w)
+            setSunMoon(sm)
+            setLoading(false)
+            return
+          }
+        } catch {}
+      }
+
       const dateNow = new Date().toISOString()
 
       const [weatherRes, sunRes, moonRes] = await Promise.allSettled([
@@ -173,6 +188,12 @@ export default function VaderPage() {
         sm.moon_illumination_pct = m.moon_illumination_pct ?? null
       }
       setSunMoon(sm)
+
+      // Cache result (30 min)
+      try {
+        const cacheKey = `weather-${lat.toFixed(2)}-${lng.toFixed(2)}`
+        sessionStorage.setItem(cacheKey, JSON.stringify({ weather: weatherData, sunMoon: sm, ts: Date.now() }))
+      } catch {}
 
       // Kick off AI fishing forecast in background (non-blocking)
       const trend = overallTrend(weatherData.history)
