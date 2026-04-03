@@ -14,20 +14,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Fångst hittades inte' }, { status: 404 })
     }
 
-    // Check access - public or own
+    // Check access
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
 
-    if (!data.is_public && data.user_id !== user?.id) {
-      return NextResponse.json({ error: 'Åtkomst nekad' }, { status: 403 })
-    }
+    const isOwner = user && data.user_id === user.id
 
-    // Strip location data if the viewer is NOT the owner
-    if (user && data.user_id !== user.id) {
-      let canSeeLocation = false
-
-      // Check if they are friends with share_location=true
-      const { data: friendship } = await admin
+    // Check friendship if not owner and not public
+    let friendship: { share_location: boolean } | null = null
+    if (!isOwner && user) {
+      const { data: f } = await admin
         .from('friendships')
         .select('share_location')
         .eq('status', 'accepted')
@@ -36,11 +32,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           `and(requester_id.eq.${data.user_id},addressee_id.eq.${user.id})`
         )
         .maybeSingle()
+      friendship = f
+    }
 
-      if (friendship?.share_location) {
-        canSeeLocation = true
-      }
+    const isFriend = !!friendship
 
+    // Access: own, public, or friend
+    if (!isOwner && !data.is_public && !isFriend) {
+      return NextResponse.json({ error: 'Åtkomst nekad' }, { status: 403 })
+    }
+
+    // Strip location data if viewer is not owner and not friend with share_location
+    if (!isOwner) {
+      const canSeeLocation = friendship?.share_location === true
       if (!canSeeLocation) {
         data.exif_lat = null
         data.exif_lng = null
