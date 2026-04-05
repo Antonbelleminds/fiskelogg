@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 
 export const SPECIES_OPTIONS = [
   'Abborre', 'Gädda', 'Gös', 'Öring', 'Lax', 'Regnbåge', 'Röding', 'Harr',
@@ -107,6 +109,19 @@ interface CatchFormProps {
 
 export default function CatchForm({ initialData, onSave, saving, error, submitLabel = 'Spara fångst', onCancel }: CatchFormProps) {
   const [form, setForm] = useState<CatchFormData>(initialData)
+  const [showMapModal, setShowMapModal] = useState(false)
+  const [catcherError, setCatcherError] = useState(false)
+
+  function handleSave() {
+    if (!form.catcher_name || !form.catcher_name.trim()) {
+      setCatcherError(true)
+      // Scroll to top where catcher field is
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    setCatcherError(false)
+    onSave(form)
+  }
 
   // Sync background-loaded fields (geocode, weather, moon) into form state
   // Only applies when parent updates initialData after initial mount (e.g. geocode returns)
@@ -153,20 +168,17 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
         </div>
       )}
 
-      {form.ai_fish_description && (
-        <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-3 text-sm">
-          <span className="font-medium">AI-analys:</span> {form.ai_fish_description}
-        </div>
-      )}
-
-      {/* Fångstperson */}
-      <FieldGroup label="Fångstperson">
+      {/* Fångstperson (obligatorisk) */}
+      <FieldGroup label="Fångstperson *">
         <AutocompleteInput
           value={form.catcher_name}
-          onChange={(val) => updateForm({ catcher_name: val })}
-          placeholder="Ditt namn (standard: du)"
+          onChange={(val) => { updateForm({ catcher_name: val }); if (val.trim()) setCatcherError(false) }}
+          placeholder="Vem fångade fisken?"
           field="catcher_name"
         />
+        {catcherError && (
+          <p className="text-xs text-red-500 mt-1">Du måste ange vem som fångade fisken</p>
+        )}
         {form.catcher_user_id && form.catcher_name && (
           <div className="text-xs text-primary-600 mt-1">Matchad med profil</div>
         )}
@@ -220,13 +232,26 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
 
       {/* Plats */}
       <FieldGroup label="Sjönamn / Vatten">
-        <input
-          type="text"
-          value={form.water_body}
-          onChange={(e) => updateForm({ water_body: e.target.value })}
-          placeholder="T.ex. Vättern, Storån..."
-          className="input-field"
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={form.water_body}
+            onChange={(e) => updateForm({ water_body: e.target.value })}
+            placeholder="T.ex. Vättern, Storån..."
+            className="input-field flex-1"
+          />
+          <button
+            type="button"
+            onClick={() => setShowMapModal(true)}
+            className="shrink-0 w-11 h-11 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+            title="Välj plats på karta"
+          >
+            <svg className="w-5 h-5 text-slate-600 dark:text-slate-300" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+            </svg>
+          </button>
+        </div>
       </FieldGroup>
 
       <FieldGroup label="Region / Län">
@@ -243,6 +268,19 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
         <div className="text-xs text-slate-500">
           GPS: {form.lat.toFixed(5)}, {form.lng.toFixed(5)}
         </div>
+      )}
+
+      {/* Kartmodal — interaktiv */}
+      {showMapModal && (
+        <LocationPickerModal
+          lat={form.lat}
+          lng={form.lng}
+          onClose={() => setShowMapModal(false)}
+          onConfirm={(lat, lng, waterBody, locationName) => {
+            updateForm({ lat, lng, water_body: waterBody || form.water_body, location_name: locationName || form.location_name })
+            setShowMapModal(false)
+          }}
+        />
       )}
 
       {/* Metod */}
@@ -362,7 +400,7 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
           </button>
         )}
         <button
-          onClick={() => onSave(form)}
+          onClick={handleSave}
           disabled={saving}
           className={`${onCancel ? 'flex-1' : 'w-full'} py-3.5 px-4 rounded-xl bg-primary-700 text-white font-medium hover:bg-primary-800 disabled:opacity-50 transition`}
         >
@@ -391,6 +429,152 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
           color: #f8fafc;
         }
       `}</style>
+    </div>
+  )
+}
+
+function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
+  lat: number | null
+  lng: number | null
+  onClose: () => void
+  onConfirm: (lat: number, lng: number, waterBody?: string, locationName?: string) => void
+}) {
+  const mapContainer = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const markerRef = useRef<mapboxgl.Marker | null>(null)
+  const [pickedLat, setPickedLat] = useState(lat ?? 62.0)
+  const [pickedLng, setPickedLng] = useState(lng ?? 15.0)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [geocoding, setGeocoding] = useState(false)
+
+  const defaultCenter: [number, number] = [lng ?? 15.0, lat ?? 62.0]
+  const defaultZoom = lat && lng ? 12 : 4
+
+  useEffect(() => {
+    if (!mapContainer.current) return
+
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || ''
+
+    const map = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      center: defaultCenter,
+      zoom: defaultZoom,
+    })
+
+    const marker = new mapboxgl.Marker({ draggable: true, color: '#000000' })
+      .setLngLat(defaultCenter)
+      .addTo(map)
+
+    marker.on('dragend', () => {
+      const pos = marker.getLngLat()
+      setPickedLat(pos.lat)
+      setPickedLng(pos.lng)
+    })
+
+    map.on('click', (e) => {
+      marker.setLngLat(e.lngLat)
+      setPickedLat(e.lngLat.lat)
+      setPickedLng(e.lngLat.lng)
+    })
+
+    mapRef.current = map
+    markerRef.current = marker
+
+    return () => { map.remove() }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleSearch() {
+    if (!searchQuery.trim() || searching) return
+    setSearching(true)
+    try {
+      const res = await fetch(`/api/geocode-search?q=${encodeURIComponent(searchQuery.trim())}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.lat && data.lng) {
+          setPickedLat(data.lat)
+          setPickedLng(data.lng)
+          markerRef.current?.setLngLat([data.lng, data.lat])
+          mapRef.current?.flyTo({ center: [data.lng, data.lat], zoom: 12 })
+        }
+      }
+    } catch { /* ignore */ }
+    setSearching(false)
+  }
+
+  async function handleConfirm() {
+    setGeocoding(true)
+    let waterBody = ''
+    let locationName = ''
+    try {
+      const res = await fetch(`/api/geocode?lat=${pickedLat}&lng=${pickedLng}`)
+      if (res.ok) {
+        const data = await res.json()
+        waterBody = data.water_body || ''
+        locationName = data.location_name || ''
+      }
+    } catch { /* ignore */ }
+    setGeocoding(false)
+    onConfirm(pickedLat, pickedLng, waterBody, locationName)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl overflow-hidden w-full max-w-md shadow-xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+          <h3 className="font-semibold text-sm">Välj plats</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder="Sök plats..."
+              className="input-field flex-1"
+            />
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={searching}
+              className="shrink-0 px-3 py-2 rounded-xl bg-primary-700 text-white text-sm font-medium hover:bg-primary-800 disabled:opacity-50 transition"
+            >
+              {searching ? '...' : 'Sök'}
+            </button>
+          </div>
+        </div>
+
+        {/* Map */}
+        <div ref={mapContainer} className="w-full" style={{ height: '50vh', minHeight: 280 }} />
+
+        {/* Footer */}
+        <div className="p-4 space-y-2 border-t border-slate-200 dark:border-slate-700">
+          <p className="text-xs text-slate-500 text-center">
+            Tryck på kartan eller dra markören för att flytta platsen
+          </p>
+          <div className="text-xs text-slate-400 text-center">
+            {pickedLat.toFixed(5)}, {pickedLng.toFixed(5)}
+          </div>
+          <button
+            onClick={handleConfirm}
+            disabled={geocoding}
+            className="w-full py-2.5 bg-primary-700 text-white rounded-xl font-medium text-sm hover:bg-primary-800 disabled:opacity-50 transition"
+          >
+            {geocoding ? 'Hämtar platsnamn...' : 'Bekräfta plats'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
