@@ -556,7 +556,7 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
         </div>
 
         {/* Map */}
-        <div ref={mapContainer} className="w-full" style={{ height: '50vh', minHeight: 280 }} />
+        <div ref={mapContainer} className="w-full flex-1" style={{ minHeight: 200 }} />
 
         {/* Footer */}
         <div className="p-4 space-y-2 border-t border-slate-200 dark:border-slate-700">
