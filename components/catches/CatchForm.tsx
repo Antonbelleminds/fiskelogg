@@ -522,7 +522,7 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl overflow-hidden w-full max-w-md shadow-xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl overflow-hidden w-full max-w-md shadow-xl h-[90vh] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
           <h3 className="font-semibold text-sm">Välj plats</h3>
@@ -556,7 +556,7 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
         </div>
 
         {/* Map */}
-        <div ref={mapContainer} className="w-full flex-1" style={{ minHeight: 200 }} />
+        <div ref={mapContainer} className="w-full flex-1" style={{ minHeight: 240 }} />
 
         {/* Footer */}
         <div className="p-4 space-y-2 border-t border-slate-200 dark:border-slate-700">
