@@ -473,6 +473,10 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
       setPickedLng(pos.lng)
     })
 
+    map.on('load', () => {
+      map.resize()
+    })
+
     map.on('click', (e) => {
       marker.setLngLat(e.lngLat)
       setPickedLat(e.lngLat.lat)
@@ -522,10 +526,10 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl overflow-hidden w-full max-w-md shadow-xl h-[90vh] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-xl h-[90vh] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-          <h3 className="font-semibold text-sm">Välj plats</h3>
+        <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+          <h3 className="font-semibold text-sm">Justera plats manuellt</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -534,7 +538,7 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
         </div>
 
         {/* Search */}
-        <div className="px-4 py-2 border-b border-slate-200 dark:border-slate-700">
+        <div className="shrink-0 px-4 py-2 border-b border-slate-200 dark:border-slate-700">
           <div className="flex gap-2">
             <input
               type="text"
@@ -555,23 +559,15 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
           </div>
         </div>
 
-        {/* Map */}
-        <div ref={mapContainer} className="w-full flex-1" style={{ minHeight: 240 }} />
-
-        {/* Footer */}
-        <div className="p-4 space-y-2 border-t border-slate-200 dark:border-slate-700">
-          <p className="text-xs text-slate-500 text-center">
-            Tryck på kartan eller dra markören för att flytta platsen
-          </p>
-          <div className="text-xs text-slate-400 text-center">
-            {pickedLat.toFixed(5)}, {pickedLng.toFixed(5)}
-          </div>
+        {/* Map + overlay button */}
+        <div className="relative flex-1 min-h-0">
+          <div ref={mapContainer} className="absolute inset-0" />
           <button
             onClick={handleConfirm}
             disabled={geocoding}
-            className="w-full py-2.5 bg-primary-700 text-white rounded-xl font-medium text-sm hover:bg-primary-800 disabled:opacity-50 transition"
+            className="absolute top-3 right-3 z-10 px-4 py-2 bg-primary-700 text-white rounded-xl font-medium text-sm shadow-lg hover:bg-primary-800 disabled:opacity-50 transition"
           >
-            {geocoding ? 'Hämtar platsnamn...' : 'Bekräfta plats'}
+            {geocoding ? 'Hämtar...' : 'Spara'}
           </button>
         </div>
       </div>
