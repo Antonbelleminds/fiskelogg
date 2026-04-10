@@ -581,7 +581,7 @@ function LocationPickerModal({ lat, lng, onClose, onConfirm }: {
 
         {/* Map + overlay button */}
         <div className="relative flex-1 min-h-0">
-          <div ref={mapContainer} className="absolute inset-0" />
+          <div ref={mapContainer} className="w-full h-full" />
           <button
             onClick={handleConfirm}
             disabled={geocoding}
