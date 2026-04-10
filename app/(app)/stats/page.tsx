@@ -41,6 +41,8 @@ interface PersonStats {
   uniqueSpecies: number
   maxWeight: number
   maxWeightSpecies: string
+  maxLength: number
+  maxLengthSpecies: string
   topSpecies: string
   topWater: string
   avgWeight: number
@@ -88,6 +90,8 @@ function computePersonStats(name: string, catches: Catch[]): PersonStats {
   const weights = catches.filter(c => c.weight_kg).map(c => c.weight_kg!)
   const heaviest = catches.reduce<Catch | null>((best, c) =>
     c.weight_kg && c.weight_kg > (best?.weight_kg || 0) ? c : best, null)
+  const longest = catches.reduce<Catch | null>((best, c) =>
+    c.length_cm && c.length_cm > (best?.length_cm || 0) ? c : best, null)
 
   const speciesCounts: Record<string, number> = {}
   catches.forEach(c => { if (c.species) speciesCounts[c.species] = (speciesCounts[c.species] || 0) + 1 })
@@ -104,6 +108,8 @@ function computePersonStats(name: string, catches: Catch[]): PersonStats {
     uniqueSpecies: speciesSet.size,
     maxWeight: heaviest?.weight_kg || 0,
     maxWeightSpecies: heaviest?.species || '-',
+    maxLength: longest?.length_cm || 0,
+    maxLengthSpecies: longest?.species || '-',
     topSpecies: topSpecies ? topSpecies[0] : '-',
     topWater: topWater ? topWater[0] : '-',
     avgWeight: weights.length > 0 ? weights.reduce((a, b) => a + b, 0) / weights.length : 0,
@@ -212,6 +218,14 @@ export default function StatsPage() {
     return filteredCatches.reduce<Catch | null>((best, c) => {
       if (!c.weight_kg) return best
       if (!best || c.weight_kg > (best.weight_kg || 0)) return c
+      return best
+    }, null)
+  }, [filteredCatches])
+
+  const pbLength = useMemo(() => {
+    return filteredCatches.reduce<Catch | null>((best, c) => {
+      if (!c.length_cm) return best
+      if (!best || c.length_cm > (best.length_cm || 0)) return c
       return best
     }, null)
   }, [filteredCatches])
@@ -330,8 +344,8 @@ export default function StatsPage() {
   const personA = useMemo(() => allPeople.find(p => p.name === compareA), [allPeople, compareA])
   const personB = useMemo(() => allPeople.find(p => p.name === compareB), [allPeople, compareB])
 
-  // Badges (based on own catches)
-  const badges = useMemo(() => computeBadges(myCatches), [myCatches])
+  // Badges (based on filtered catches)
+  const badges = useMemo(() => computeBadges(filteredCatches), [filteredCatches])
 
   function getCatchesForField(field: keyof Catch, value: string): Catch[] {
     return filteredCatches.filter((c) => {
@@ -428,7 +442,19 @@ export default function StatsPage() {
       {/* Badges - only on Mina tab */}
       {activeTab === 'mine' && (
         <div className="mb-5">
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 uppercase tracking-wider">Utmärkelser</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Utmärkelser</p>
+            <select
+              value={filterYear}
+              onChange={(e) => setFilterYear(e.target.value)}
+              className="text-xs px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-slate-200 focus:outline-none"
+            >
+              <option value="">Alla år</option>
+              {allYears.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
           <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
             {badges.map(b => (
               <button
@@ -507,6 +533,12 @@ export default function StatsPage() {
           value={pbWeight?.weight_kg ? `${pbWeight.weight_kg} kg` : '-'}
           sub={pbWeight?.species || undefined}
           color="bg-amber-50 dark:bg-amber-900/20"
+        />
+        <StatCard
+          label="PB längd"
+          value={pbLength?.length_cm ? `${pbLength.length_cm} cm` : '-'}
+          sub={pbLength?.species || undefined}
+          color="bg-sky-50 dark:bg-sky-900/20"
         />
         <StatCard label="Favoritvatten" value={favoriteWater || '-'} color="bg-purple-50 dark:bg-purple-900/20" small />
       </div>
@@ -593,7 +625,8 @@ export default function StatsPage() {
           {personA && personB && (
             <div className="space-y-2">
               <CompareRow label="Fångster" a={personA.totalCatches} b={personB.totalCatches} nameA={personA.name} nameB={personB.name} unit="st" />
-              <CompareRow label="Största fisk" a={personA.maxWeight} b={personB.maxWeight} nameA={personA.name} nameB={personB.name} unit="kg" />
+              <CompareRow label="Tyngsta fisk" a={personA.maxWeight} b={personB.maxWeight} nameA={personA.name} nameB={personB.name} unit="kg" />
+              <CompareRow label="Längsta fisk" a={personA.maxLength} b={personB.maxLength} nameA={personA.name} nameB={personB.name} unit="cm" />
               <CompareRow label="Arter" a={personA.uniqueSpecies} b={personB.uniqueSpecies} nameA={personA.name} nameB={personB.name} unit="st" />
               <CompareRow label="Snittfisk" a={Math.round(personA.avgWeight * 10) / 10} b={Math.round(personB.avgWeight * 10) / 10} nameA={personA.name} nameB={personB.name} unit="kg" />
               <div className="grid grid-cols-3 gap-1 mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60">
