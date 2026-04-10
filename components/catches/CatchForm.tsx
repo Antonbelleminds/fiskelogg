@@ -111,6 +111,20 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
   const [form, setForm] = useState<CatchFormData>(initialData)
   const [showMapModal, setShowMapModal] = useState(false)
   const [catcherError, setCatcherError] = useState(false)
+  const [fetchingWeather, setFetchingWeather] = useState(false)
+
+  async function fetchWeatherForLocation(lat: number, lng: number, caughtAt: string) {
+    const date = caughtAt ? caughtAt.slice(0, 10) : new Date().toISOString().slice(0, 10)
+    setFetchingWeather(true)
+    try {
+      const res = await fetch(`/api/weather?lat=${lat}&lng=${lng}&date=${date}`)
+      if (res.ok) {
+        const data = await res.json()
+        setForm(prev => ({ ...prev, ...data }))
+      }
+    } catch { /* ignore */ }
+    setFetchingWeather(false)
+  }
 
   function handleSave() {
     if (!form.catcher_name || !form.catcher_name.trim()) {
@@ -279,6 +293,7 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
           onConfirm={(lat, lng, waterBody, locationName) => {
             updateForm({ lat, lng, water_body: waterBody || form.water_body, location_name: locationName || form.location_name })
             setShowMapModal(false)
+            fetchWeatherForLocation(lat, lng, form.caught_at)
           }}
         />
       )}
@@ -364,7 +379,12 @@ export default function CatchForm({ initialData, onSave, saving, error, submitLa
       </FieldGroup>
 
       {/* Väderinfo (auto) */}
-      {form.weather_condition && (
+      {fetchingWeather && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 text-xs text-blue-700 dark:text-blue-300">
+          Hämtar väderdata för ny plats...
+        </div>
+      )}
+      {!fetchingWeather && form.weather_condition && (
         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 space-y-1">
           <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">Väder (automatiskt)</h3>
           <div className="text-xs text-blue-700 dark:text-blue-300 grid grid-cols-2 gap-1">
