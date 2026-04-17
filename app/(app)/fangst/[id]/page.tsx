@@ -6,6 +6,8 @@ import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
 import { createClient } from '@/lib/supabase/client'
 import CatchForm, { type CatchFormData } from '@/components/catches/CatchForm'
+import { ImageCropPositioner } from '@/components/catches/ImageCropPositioner'
+import { SolunarDayBar, SolunarStrengthPills } from '@/components/catches/SolunarDayBar'
 import type { CatchWithProfile } from '@/types/database'
 import { usePin } from '@/contexts/PinContext'
 
@@ -21,6 +23,7 @@ export default function CatchDetailPage() {
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState('')
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [editImagePosition, setEditImagePosition] = useState<string | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -106,6 +109,7 @@ export default function CatchDetailPage() {
           length_cm: data.length_cm ? parseFloat(data.length_cm) : null,
           depth_m: data.depth_m ? parseFloat(data.depth_m) : null,
           water_temp_c: data.water_temp_c ? parseFloat(data.water_temp_c as string) : null,
+          image_position: editImagePosition ?? catchData?.image_position ?? null,
         }),
       })
 
@@ -114,6 +118,7 @@ export default function CatchDetailPage() {
       const updated = await res.json()
       setCatchData((prev) => prev ? { ...prev, ...updated } : prev)
       setEditing(false)
+      setEditImagePosition(null)
     } catch {
       setEditError('Kunde inte spara ändringar. Försök igen.')
     } finally {
@@ -194,8 +199,12 @@ export default function CatchDetailPage() {
         </div>
 
         {c.image_url && (
-          <div className="aspect-[4/3] overflow-hidden mb-4">
-            <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" loading="lazy" />
+          <div className="mb-4 px-4">
+            <ImageCropPositioner
+              imageSrc={c.image_url}
+              value={editImagePosition ?? c.image_position ?? '50% 50%'}
+              onChange={setEditImagePosition}
+            />
           </div>
         )}
 
@@ -206,7 +215,7 @@ export default function CatchDetailPage() {
             saving={saving}
             error={editError}
             submitLabel="Spara ändringar"
-            onCancel={() => setEditing(false)}
+            onCancel={() => { setEditing(false); setEditImagePosition(null) }}
           />
         </div>
       </div>
@@ -229,7 +238,13 @@ export default function CatchDetailPage() {
       {/* Image */}
       {c.image_url && (
         <div className="aspect-[4/3] overflow-hidden mt-2">
-          <img src={c.image_url} alt={c.species || 'Fångst'} className="w-full h-full object-cover" loading="lazy" />
+          <img
+            src={c.image_url}
+            alt={c.species || 'Fångst'}
+            className="w-full h-full object-cover"
+            style={{ objectPosition: c.image_position || 'center' }}
+            loading="lazy"
+          />
         </div>
       )}
 
@@ -297,6 +312,39 @@ export default function CatchDetailPage() {
               {c.sunset_time && <span>Nedgång: {c.sunset_time}</span>}
               {c.is_golden_hour && <span className="text-amber-600 font-medium">Gyllene timmen</span>}
             </div>
+          </div>
+        )}
+
+        {/* Solunar */}
+        {c.exif_lat && c.exif_lng && (
+          <div className="bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold">Solunar</h2>
+              {c.solunar_strength !== null && c.solunar_strength !== undefined && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">Dagens styrka</span>
+                  <SolunarStrengthPills strength={c.solunar_strength} />
+                </div>
+              )}
+            </div>
+            <SolunarDayBar
+              date={new Date(c.caught_at)}
+              lat={c.exif_lat}
+              lng={c.exif_lng}
+              markerAt={new Date(c.caught_at)}
+              sunriseTime={c.sunrise_time}
+              sunsetTime={c.sunset_time}
+            />
+            {c.solunar_period && c.solunar_period !== 'none' && (
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-3">
+                Fångad under <strong>{c.solunar_period === 'major' ? 'major' : 'minor'}</strong> solunar-period.
+              </p>
+            )}
+            {c.solunar_period === 'none' && (
+              <p className="text-xs text-slate-500 dark:text-slate-500 mt-3">
+                Fångad utanför aktiv solunar-period.
+              </p>
+            )}
           </div>
         )}
 

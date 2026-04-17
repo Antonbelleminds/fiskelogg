@@ -29,14 +29,18 @@ export async function updateSession(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user ?? null
 
+  const authPaths = ['/logga-in', '/registrera', '/glomt-losenord', '/aterstall-losenord']
+  const isAuthPath = authPaths.some(p => request.nextUrl.pathname.startsWith(p))
+
   // If no user and trying to access app routes, redirect to login
-  if (!user && !request.nextUrl.pathname.startsWith('/logga-in') && !request.nextUrl.pathname.startsWith('/registrera') && !request.nextUrl.pathname.startsWith('/api')) {
+  if (!user && !isAuthPath && !request.nextUrl.pathname.startsWith('/api')) {
     const url = request.nextUrl.clone()
     url.pathname = '/logga-in'
     return NextResponse.redirect(url)
   }
 
-  // If user and on auth pages, redirect to app
+  // If user is logged in and on login/register, redirect to app.
+  // Do NOT redirect from /aterstall-losenord — the user has a recovery session there.
   if (user && (request.nextUrl.pathname.startsWith('/logga-in') || request.nextUrl.pathname.startsWith('/registrera'))) {
     const url = request.nextUrl.clone()
     url.pathname = '/'

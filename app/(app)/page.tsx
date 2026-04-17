@@ -541,6 +541,7 @@ function FeedCard({ catch: c, showUser = false }: { catch: CatchWithProfile; sho
               src={c.image_url}
               alt={c.species || 'Fångst'}
               className="w-full h-full object-cover"
+              style={{ objectPosition: c.image_position || 'center' }}
               loading="lazy"
             />
           </div>

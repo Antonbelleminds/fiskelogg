@@ -27,6 +27,8 @@ interface Catch {
   image_url: string | null
   pressure_hpa: number | null
   catcher_name: string | null
+  solunar_period: 'major' | 'minor' | 'none' | null
+  solunar_strength: number | null
   profiles?: CatchProfile
 }
 
@@ -228,6 +230,19 @@ export default function StatsPage() {
       if (!best || c.length_cm > (best.length_cm || 0)) return c
       return best
     }, null)
+  }, [filteredCatches])
+
+  const solunarStats = useMemo(() => {
+    const withPeriod = filteredCatches.filter(c => c.solunar_period !== null && c.solunar_period !== undefined)
+    if (withPeriod.length === 0) return null
+    const major = withPeriod.filter(c => c.solunar_period === 'major').length
+    const minor = withPeriod.filter(c => c.solunar_period === 'minor').length
+    const none = withPeriod.filter(c => c.solunar_period === 'none').length
+    // Major = 4h/day, Minor = 2h/day, None = 18h/day. Fångster per timme i respektive fönster.
+    const majorPerHour = major / 4
+    const nonePerHour = none / 18
+    const ratio = nonePerHour > 0 ? majorPerHour / nonePerHour : null
+    return { major, minor, none, total: withPeriod.length, ratio }
   }, [filteredCatches])
 
   const favoriteWater = useMemo(() => {
@@ -542,6 +557,74 @@ export default function StatsPage() {
         />
         <StatCard label="Favoritvatten" value={favoriteWater || '-'} color="bg-purple-50 dark:bg-purple-900/20" small />
       </div>
+
+      {/* Solunar-insikt */}
+      {solunarStats && solunarStats.total >= 3 && (
+        <div className="mb-6 bg-slate-100 dark:bg-slate-800 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Solunar-mönster</h3>
+            <span className="text-[10px] uppercase tracking-wider text-slate-500">
+              {solunarStats.total} fångster
+            </span>
+          </div>
+          <div className="flex w-full h-6 rounded-md overflow-hidden bg-slate-200 dark:bg-slate-700 mb-2">
+            {solunarStats.major > 0 && (
+              <div
+                className="bg-primary-700 dark:bg-white flex items-center justify-center text-[10px] font-medium text-white dark:text-slate-900"
+                style={{ width: `${(solunarStats.major / solunarStats.total) * 100}%` }}
+                title={`${solunarStats.major} under major`}
+              >
+                {solunarStats.major}
+              </div>
+            )}
+            {solunarStats.minor > 0 && (
+              <div
+                className="bg-slate-500 dark:bg-slate-400 flex items-center justify-center text-[10px] font-medium text-white dark:text-slate-900"
+                style={{ width: `${(solunarStats.minor / solunarStats.total) * 100}%` }}
+                title={`${solunarStats.minor} under minor`}
+              >
+                {solunarStats.minor}
+              </div>
+            )}
+            {solunarStats.none > 0 && (
+              <div
+                className="bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-[10px] font-medium text-slate-700 dark:text-slate-300"
+                style={{ width: `${(solunarStats.none / solunarStats.total) * 100}%` }}
+                title={`${solunarStats.none} utanför period`}
+              >
+                {solunarStats.none}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-3 text-[10px] text-slate-500 dark:text-slate-400 mb-2">
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-sm bg-primary-700 dark:bg-white" /> Major
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-sm bg-slate-500 dark:bg-slate-400" /> Minor
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block w-2 h-2 rounded-sm bg-slate-300 dark:bg-slate-600" /> Utanför
+            </span>
+          </div>
+          {solunarStats.ratio !== null && solunarStats.ratio >= 1.2 && (
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Du fångar <strong>{solunarStats.ratio.toFixed(1)}×</strong> så ofta per timme under major-perioder
+              jämfört med utanför.
+            </p>
+          )}
+          {solunarStats.ratio !== null && solunarStats.ratio < 1.2 && solunarStats.ratio >= 0.8 && (
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Inget tydligt solunar-mönster i din data — du fångar ungefär lika ofta oavsett period.
+            </p>
+          )}
+          {solunarStats.ratio !== null && solunarStats.ratio < 0.8 && (
+            <p className="text-xs text-slate-600 dark:text-slate-400">
+              Dina fångster är vanligare utanför solunar-perioder. Kanske en fingervisning om när du fiskar?
+            </p>
+          )}
+        </div>
+      )}
 
       {/* === REKORD PER ART === */}
       {recordsBySpecies.length > 0 && (

@@ -5,9 +5,12 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { extractExif } from '@/lib/exif'
 import CatchForm, { getDefaultFormData, SPECIES_OPTIONS, type CatchFormData } from '@/components/catches/CatchForm'
+import { ImageCropPositioner } from '@/components/catches/ImageCropPositioner'
 import type { ImageAnalysis } from '@/types/database'
 import { invalidateCache } from '@/lib/cache'
 import { usePin } from '@/contexts/PinContext'
+import { computeImageHash } from '@/lib/imageHash'
+import { computeSolunar } from '@/lib/solunar'
 
 export default function AddCatchPage() {
   const router = useRouter()
@@ -16,6 +19,9 @@ export default function AddCatchPage() {
   const [step, setStep] = useState<'image' | 'form'>('image')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imagePosition, setImagePosition] = useState<string>('50% 50%')
+  const [imageHash, setImageHash] = useState<string | null>(null)
+  const [duplicateOf, setDuplicateOf] = useState<{ id: string; species: string | null; caught_at: string } | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -31,6 +37,24 @@ export default function AddCatchPage() {
     setError('')
     setAnalysisError('')
     setAnalysisResult(null)
+    setDuplicateOf(null)
+    setImageHash(null)
+
+    // Hash original file and check for duplicates (fire-and-forget; result blocks save)
+    computeImageHash(file).then(async (hash) => {
+      setImageHash(hash)
+      try {
+        const res = await fetch('/api/catches/check-duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ hash }),
+        })
+        if (res.ok) {
+          const body = await res.json()
+          if (body.duplicate && body.catch) setDuplicateOf(body.catch)
+        }
+      } catch {}
+    }).catch(() => {})
 
     const updates: Partial<CatchFormData> = {}
 
@@ -160,6 +184,12 @@ export default function AddCatchPage() {
     setSaving(true)
     setError('')
 
+    if (duplicateOf) {
+      setError('Den här bilden är redan uppladdad.')
+      setSaving(false)
+      return
+    }
+
     try {
       let imageUrl = null
       let imagePath = null
@@ -194,6 +224,16 @@ export default function AddCatchPage() {
       }
 
       const isEncrypted = !!encryptionFields.location_encrypted
+
+      let solunarPeriod: 'major' | 'minor' | 'none' | null = null
+      let solunarStrength: number | null = null
+      if (data.lat && data.lng && data.caught_at) {
+        try {
+          const info = computeSolunar(new Date(data.caught_at), data.lat, data.lng)
+          solunarPeriod = info.period
+          solunarStrength = info.strength
+        } catch {}
+      }
 
       const catchBody = {
         caught_at: data.caught_at || new Date().toISOString(),
@@ -236,6 +276,10 @@ export default function AddCatchPage() {
         exif_captured_at: data.exif_captured_at || null,
         image_url: imageUrl,
         image_path: imagePath,
+        image_position: imagePosition,
+        image_hash: imageHash,
+        solunar_period: solunarPeriod,
+        solunar_strength: solunarStrength,
       }
 
       const res = await fetch('/api/catches', {
@@ -246,6 +290,11 @@ export default function AddCatchPage() {
 
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}))
+        if (res.status === 409 && errBody.duplicate) {
+          setError('Den här bilden är redan uppladdad.')
+          setSaving(false)
+          return
+        }
         console.error('Save catch failed:', errBody)
         throw new Error(errBody.error || 'Save failed')
       }
@@ -340,8 +389,27 @@ export default function AddCatchPage() {
       <h1 className="text-xl font-semibold mb-4">Lägg till fångst</h1>
 
       {imagePreview && (
-        <div className="mb-4 rounded-2xl overflow-hidden aspect-[4/3] relative">
-          <img src={imagePreview} alt="Fångst" className="w-full h-full object-cover" />
+        <div className="mb-4">
+          <ImageCropPositioner
+            imageSrc={imagePreview}
+            value={imagePosition}
+            onChange={setImagePosition}
+          />
+        </div>
+      )}
+
+      {duplicateOf && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm flex items-start gap-3">
+          <svg className="w-5 h-5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+          </svg>
+          <div className="flex-1">
+            <p className="font-medium">Den här bilden är redan uppladdad</p>
+            <p className="text-xs mt-0.5">
+              Sparad{duplicateOf.species ? ` som ${duplicateOf.species}` : ''} {new Date(duplicateOf.caught_at).toLocaleDateString('sv-SE')}.{' '}
+              <Link href={`/fangst/${duplicateOf.id}`} className="underline font-medium">Visa fångst</Link>
+            </p>
+          </div>
         </div>
       )}
 

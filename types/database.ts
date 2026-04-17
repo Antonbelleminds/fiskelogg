@@ -9,6 +9,14 @@ export interface Profile {
   created_at: string
 }
 
+export interface UserSecrets {
+  id: string
+  pin_hash: string | null
+  pin_salt: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Catch {
   id: string
   user_id: string
@@ -49,6 +57,10 @@ export interface Catch {
   catcher_name: string | null
   image_url: string | null
   image_path: string | null
+  image_position: string | null
+  image_hash: string | null
+  solunar_period: 'major' | 'minor' | 'none' | null
+  solunar_strength: number | null
   exif_captured_at: string | null
   exif_lat: number | null
   exif_lng: number | null

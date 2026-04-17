@@ -47,11 +47,11 @@ function PinGate({ children }: { children: React.ReactNode }) {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setLoaded(true); return }
       const { data } = await supabase
-        .from('profiles')
+        .from('user_secrets')
         .select('pin_hash, pin_salt')
         .eq('id', user.id)
-        .single()
-      if (data) {
+        .maybeSingle()
+      if (data?.pin_hash && data?.pin_salt) {
         setProfilePin(data.pin_hash, data.pin_salt)
         sessionStorage.setItem('fiskepin-profile', JSON.stringify({ pin_hash: data.pin_hash, pin_salt: data.pin_salt }))
       }

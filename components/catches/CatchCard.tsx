@@ -17,6 +17,7 @@ export default function CatchCard({ catch: c, showUser = false }: { catch: Catch
             src={c.image_url}
             alt={c.species || 'Fångst'}
             className="w-full h-full object-cover"
+            style={{ objectPosition: c.image_position || 'center' }}
             loading="lazy"
           />
         </div>

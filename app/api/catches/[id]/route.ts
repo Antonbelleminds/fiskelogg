@@ -1,6 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/server'
 
+const ALLOWED_PATCH_FIELDS = [
+  'caught_at',
+  'is_public',
+  'notes',
+  'species',
+  'species_confidence',
+  'weight_kg',
+  'length_cm',
+  'location_name',
+  'water_body',
+  'fishing_method',
+  'lure_type',
+  'lure_color',
+  'lure_name',
+  'depth_m',
+  'bottom_structure',
+  'water_temp_c',
+  'weather_temp_c',
+  'weather_condition',
+  'wind_speed_ms',
+  'wind_direction',
+  'cloud_cover_pct',
+  'precipitation_mm',
+  'pressure_hpa',
+  'humidity_pct',
+  'visibility_km',
+  'moon_phase',
+  'moon_illumination_pct',
+  'sunrise_time',
+  'sunset_time',
+  'is_golden_hour',
+  'ai_weather_description',
+  'ai_fish_description',
+  'ai_environment_notes',
+  'catcher_name',
+  'image_url',
+  'image_path',
+  'image_position',
+  'exif_captured_at',
+  'solunar_period',
+  'solunar_strength',
+] as const
+
+function sanitizeImagePosition(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const m = value.match(/^(\d{1,3}(?:\.\d+)?)%\s+(\d{1,3}(?:\.\d+)?)%$/)
+  if (!m) return null
+  const x = parseFloat(m[1])
+  const y = parseFloat(m[2])
+  if (x < 0 || x > 100 || y < 0 || y > 100) return null
+  return `${Math.round(x)}% ${Math.round(y)}%`
+}
+
+function sanitizeSolunarPeriod(value: unknown): string | null {
+  return value === 'major' || value === 'minor' || value === 'none' ? value : null
+}
+
+function sanitizeSolunarStrength(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const n = Math.round(value)
+  return n >= 1 && n <= 5 ? n : null
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const admin = createAdminClient()
@@ -75,16 +138,30 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const body = await req.json()
     const admin = createAdminClient()
 
-    // Update location if coordinates changed
-    if (body.lat && body.lng) {
-      body.location = `POINT(${body.lng} ${body.lat})`
+    const update: Record<string, unknown> = {}
+    for (const key of ALLOWED_PATCH_FIELDS) {
+      if (key in body) update[key] = body[key]
     }
-    delete body.lat
-    delete body.lng
+
+    if ('image_position' in update) {
+      update.image_position = sanitizeImagePosition(update.image_position)
+    }
+    if ('solunar_period' in update) {
+      update.solunar_period = sanitizeSolunarPeriod(update.solunar_period)
+    }
+    if ('solunar_strength' in update) {
+      update.solunar_strength = sanitizeSolunarStrength(update.solunar_strength)
+    }
+
+    if (body.lat && body.lng) {
+      update.location = `POINT(${body.lng} ${body.lat})`
+    }
+
+    update.updated_at = new Date().toISOString()
 
     const { data, error } = await admin
       .from('catches')
-      .update({ ...body, updated_at: new Date().toISOString() })
+      .update(update)
       .eq('id', params.id)
       .eq('user_id', user.id)
       .select()

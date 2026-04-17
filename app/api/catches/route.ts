@@ -1,6 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabaseClient, createAdminClient } from '@/lib/supabase/server'
 
+function sanitizeImagePosition(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const m = value.match(/^(\d{1,3}(?:\.\d+)?)%\s+(\d{1,3}(?:\.\d+)?)%$/)
+  if (!m) return null
+  const x = parseFloat(m[1])
+  const y = parseFloat(m[2])
+  if (x < 0 || x > 100 || y < 0 || y > 100) return null
+  return `${Math.round(x)}% ${Math.round(y)}%`
+}
+
+function sanitizeSolunarPeriod(value: unknown): string | null {
+  return value === 'major' || value === 'minor' || value === 'none' ? value : null
+}
+
+function sanitizeSolunarStrength(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const n = Math.round(value)
+  return n >= 1 && n <= 5 ? n : null
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient()
@@ -152,6 +172,26 @@ export async function POST(req: NextRequest) {
       location = `POINT(${body.lng} ${body.lat})`
     }
 
+    const imageHash = typeof body.image_hash === 'string' && /^[a-f0-9]{64}$/.test(body.image_hash)
+      ? body.image_hash
+      : null
+
+    if (imageHash) {
+      const { data: existing } = await admin
+        .from('catches')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('image_hash', imageHash)
+        .limit(1)
+        .maybeSingle()
+      if (existing) {
+        return NextResponse.json(
+          { error: 'Den här bilden är redan uppladdad.', duplicate: true, catchId: existing.id },
+          { status: 409 }
+        )
+      }
+    }
+
     const { data, error } = await admin
       .from('catches')
       .insert({
@@ -193,6 +233,10 @@ export async function POST(req: NextRequest) {
         catcher_name: body.catcher_name || null,
         image_url: body.image_url || null,
         image_path: body.image_path || null,
+        image_position: sanitizeImagePosition(body.image_position),
+        image_hash: imageHash,
+        solunar_period: sanitizeSolunarPeriod(body.solunar_period),
+        solunar_strength: sanitizeSolunarStrength(body.solunar_strength),
         exif_captured_at: body.exif_captured_at || null,
         exif_lat: isEncrypted ? null : (body.lat || null),
         exif_lng: isEncrypted ? null : (body.lng || null),
@@ -205,6 +249,13 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (error) {
+      // Unique violation on (user_id, image_hash) — race-protected duplicate guard
+      if ((error as { code?: string }).code === '23505') {
+        return NextResponse.json(
+          { error: 'Den här bilden är redan uppladdad.', duplicate: true },
+          { status: 409 }
+        )
+      }
       console.error('Create catch error:', JSON.stringify(error, null, 2))
       return NextResponse.json(
         { error: 'Kunde inte spara fångsten. Försök igen.' },

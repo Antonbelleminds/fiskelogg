@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { extractExif } from '@/lib/exif'
 import { SPECIES_OPTIONS } from '@/components/catches/CatchForm'
 import { invalidateCache } from '@/lib/cache'
+import { computeImageHash } from '@/lib/imageHash'
+import { computeSolunar } from '@/lib/solunar'
 
 const MAX_IMAGES = 20
 
@@ -36,6 +38,7 @@ interface BulkItem {
   sunset_time: string
   is_golden_hour: boolean | null
   backgroundLoaded: boolean
+  image_hash: string | null
 }
 
 type Step = 'select' | 'wizard' | 'saving' | 'done'
@@ -92,9 +95,15 @@ export default function MassuppladdningPage() {
         }
       } catch {}
 
+      let image_hash: string | null = null
+      try {
+        image_hash = await computeImageHash(file)
+      } catch {}
+
       newItems.push({
         file,
         preview,
+        image_hash,
         catcher_name: '',
         species: '',
         caught_at,
@@ -276,6 +285,15 @@ export default function MassuppladdningPage() {
             is_golden_hour: item.is_golden_hour,
             image_url: imageUrl,
             image_path: imagePath,
+            image_hash: item.image_hash,
+            ...(item.lat && item.lng && item.caught_at ? (() => {
+              try {
+                const info = computeSolunar(new Date(item.caught_at), item.lat, item.lng)
+                return { solunar_period: info.period, solunar_strength: info.strength }
+              } catch {
+                return {}
+              }
+            })() : {}),
             is_public: false,
           }),
         })
