@@ -32,18 +32,17 @@ export default function CatchDetailPage() {
       if (res.ok) {
         const data = await res.json()
         setCatchData(data)
-        setLikesCount(data.likes_count || 0)
 
         const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          setCurrentUserId(user.id)
-          const { data: likeData } = await supabase
-            .from('catch_likes')
-            .select('id')
-            .eq('catch_id', id as string)
-            .eq('user_id', user.id)
-            .single()
-          setLiked(!!likeData)
+        if (user) setCurrentUserId(user.id)
+
+        const likesRes = await fetch(`/api/catches/${id}/likes`)
+        if (likesRes.ok) {
+          const likesData = await likesRes.json()
+          setLikesCount(likesData.count || 0)
+          setLiked(!!likesData.userLiked)
+        } else {
+          setLikesCount(data.likes_count || 0)
         }
       }
       setLoading(false)
@@ -72,17 +71,22 @@ export default function CatchDetailPage() {
   const isOwner = currentUserId && catchData?.user_id === currentUserId
 
   async function toggleLike() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    if (liked) {
-      await supabase.from('catch_likes').delete().eq('catch_id', id as string).eq('user_id', user.id)
-      setLiked(false)
-      setLikesCount((c) => c - 1)
-    } else {
-      await supabase.from('catch_likes').insert({ catch_id: id as string, user_id: user.id })
-      setLiked(true)
-      setLikesCount((c) => c + 1)
+    const wasLiked = liked
+    setLiked(!wasLiked)
+    setLikesCount((c) => wasLiked ? c - 1 : c + 1)
+    try {
+      const res = await fetch(`/api/catches/${id}/likes`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setLiked(!!data.liked)
+        setLikesCount(data.count || 0)
+      } else {
+        setLiked(wasLiked)
+        setLikesCount((c) => wasLiked ? c + 1 : c - 1)
+      }
+    } catch {
+      setLiked(wasLiked)
+      setLikesCount((c) => wasLiked ? c + 1 : c - 1)
     }
   }
 

@@ -14,7 +14,17 @@ async function assertCatchAccess(
   if (!data) return false
   if (data.user_id === userId) return true
   if (data.is_public) return true
-  return false
+  // Friend access: accepted friendship between viewer and owner
+  const { data: friendship } = await admin
+    .from('friendships')
+    .select('id')
+    .eq('status', 'accepted')
+    .or(
+      `and(requester_id.eq.${userId},addressee_id.eq.${data.user_id}),` +
+      `and(requester_id.eq.${data.user_id},addressee_id.eq.${userId})`
+    )
+    .maybeSingle()
+  return !!friendship
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -12,9 +12,18 @@ async function assertCatchAccess(
     .eq('id', catchId)
     .maybeSingle()
   if (!data) return false
-  if (data.user_id === userId) return true // egna fångster
-  if (data.is_public) return true          // publika fångster
-  return false                             // privat fångst som tillhör annan användare
+  if (data.user_id === userId) return true
+  if (data.is_public) return true
+  const { data: friendship } = await admin
+    .from('friendships')
+    .select('id')
+    .eq('status', 'accepted')
+    .or(
+      `and(requester_id.eq.${userId},addressee_id.eq.${data.user_id}),` +
+      `and(requester_id.eq.${data.user_id},addressee_id.eq.${userId})`
+    )
+    .maybeSingle()
+  return !!friendship
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
