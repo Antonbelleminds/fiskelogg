@@ -14,16 +14,16 @@ async function assertCatchAccess(
   if (!data) return false
   if (data.user_id === userId) return true
   if (data.is_public) return true
-  const { data: friendship } = await admin
+  const { data: friendships } = await admin
     .from('friendships')
-    .select('id')
+    .select('requester_id, addressee_id')
     .eq('status', 'accepted')
-    .or(
-      `and(requester_id.eq.${userId},addressee_id.eq.${data.user_id}),` +
-      `and(requester_id.eq.${data.user_id},addressee_id.eq.${userId})`
-    )
-    .maybeSingle()
-  return !!friendship
+    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
+  return (friendships || []).some(
+    f =>
+      (f.requester_id === userId && f.addressee_id === data.user_id) ||
+      (f.addressee_id === userId && f.requester_id === data.user_id)
+  )
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
