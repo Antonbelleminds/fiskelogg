@@ -125,7 +125,16 @@ function PinGate({ children }: { children: React.ReactNode }) {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between max-w-lg mx-auto h-11 px-4">
-          <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">FiskeLogg</span>
+          <Link href="/" aria-label="Fiskeloggboken">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/fiskeloggboken-logo.png"
+              alt="Fiskeloggboken"
+              width={162}
+              height={32}
+              className="h-7 w-auto"
+            />
+          </Link>
           <Link
             href="/vader"
             className={`p-1.5 rounded-lg transition-colors ${
