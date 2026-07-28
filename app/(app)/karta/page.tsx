@@ -337,7 +337,7 @@ export default function KartaPage() {
 
         map.addSource('sonar-depth', {
           type: 'vector',
-          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}`],
+          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=2`],
           minzoom: 0,
           maxzoom: 18,
         })
@@ -363,7 +363,16 @@ export default function KartaPage() {
               25, '#1e3a8a',
               40, '#0f172a',
             ],
-            'fill-opacity': 0.9,
+            'fill-opacity': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'confidence'], 1],
+              0, 0.2,
+              0.35, 0.55,
+              0.7, 0.78,
+              1, 0.92,
+            ],
+            'fill-antialias': false,
             'fill-outline-color': 'rgba(0,0,0,0)',
           },
           layout: { visibility: showDepth ? 'visible' : 'none' },

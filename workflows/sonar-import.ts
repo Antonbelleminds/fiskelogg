@@ -454,6 +454,11 @@ async function runDerivedRpc(
     | 'sonar_finalize_depth_cells_batch'
     | 'sonar_finalize_depth_terrain_batch'
     | 'sonar_clear_depth_cell_survey_batch'
+    | 'sonar_prepare_bathymetry'
+    | 'sonar_accumulate_bathymetry_bucket'
+    | 'sonar_finalize_bathymetry_bucket'
+    | 'sonar_finalize_bathymetry_terrain_bucket'
+    | 'sonar_clear_bathymetry_bucket'
     | 'sonar_build_tracks'
     | 'sonar_build_contours'
     | 'sonar_match_catches',
@@ -614,6 +619,46 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
           }
         )
       }
+    }
+
+    await updateJobStage(
+      jobId,
+      userId,
+      'deriving',
+      'Interpolerar sammanhängande djupyta'
+    )
+    await runDerivedRpc(jobId, userId, 'sonar_prepare_bathymetry')
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_accumulate_bathymetry_bucket',
+        { p_source_bucket: bucket }
+      )
+    }
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_finalize_bathymetry_bucket',
+        { p_target_bucket: bucket }
+      )
+    }
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_finalize_bathymetry_terrain_bucket',
+        { p_target_bucket: bucket }
+      )
+    }
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_clear_bathymetry_bucket',
+        { p_source_bucket: bucket }
+      )
     }
 
     await updateJobStage(jobId, userId, 'deriving', 'Bygger spår')
