@@ -531,8 +531,23 @@ const sonarLevelLabels: Record<SonarLevel, string> = {
 }
 
 function SonarContextCard({ context }: { context: SonarLocationContext }) {
+  const depthSpread =
+    context.minDepthM != null && context.maxDepthM != null
+      ? context.maxDepthM - context.minDepthM
+      : null
+  const isCloseEnough =
+    context.cellDistanceM == null || context.cellDistanceM <= 20
+  const depthReliable =
+    context.depthM != null &&
+    context.coverageConfidence != null &&
+    context.coverageConfidence >= 0.45 &&
+    depthSpread != null &&
+    depthSpread <= Math.max(3, context.depthM) &&
+    isCloseEnough
   const edgeValue =
-    context.depthEdgeStatus === 'on_edge'
+    !depthReliable
+      ? 'Inte kvalitetssäkrad'
+      : context.depthEdgeStatus === 'on_edge'
       ? 'I en djupkant'
       : context.depthEdgeStatus === 'near_edge'
         ? 'Nära djupkant'
@@ -540,13 +555,19 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
           ? 'Flackare område'
           : 'Okänt'
   const edgeDetail =
-    context.distanceToDepthEdgeM != null
+    !isCloseEnough
+      ? 'Närmaste djupyta ligger mer än 20 m bort'
+      : !depthReliable
+        ? 'Mätpunkterna nära platsen skiljer sig för mycket'
+        : context.distanceToDepthEdgeM != null
       ? `${Math.round(context.distanceToDepthEdgeM)} m till brantaste kanten`
       : context.slopeDeg != null
         ? `${Math.round(context.slopeDeg)}° lokal lutning`
         : undefined
   const confidence =
-    context.coverageConfidence == null
+    !depthReliable
+      ? 'Osäker'
+      : context.coverageConfidence == null
       ? 'Okänd'
       : context.coverageConfidence >= 0.75
         ? 'Hög'
@@ -574,7 +595,7 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        {context.depthM != null && (
+        {depthReliable && context.depthM != null ? (
           <SonarInfoBox
             label="Djup"
             value={`${context.depthM.toFixed(1)} m`}
@@ -582,6 +603,16 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
               context.minDepthM != null && context.maxDepthM != null
                 ? `${context.minDepthM.toFixed(1)}–${context.maxDepthM.toFixed(1)} m i mätcellen`
                 : 'Från interpolerad djupyta'
+            }
+          />
+        ) : (
+          <SonarInfoBox
+            label="Djupdata"
+            value="Kvalitetsvarning"
+            detail={
+              !isCloseEnough
+                ? 'Ingen sonarmätning inom 20 m'
+                : 'Motstridiga sonarmätningar – visar inget osäkert djup'
             }
           />
         )}
@@ -594,7 +625,7 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
           <SonarInfoBox
             label="Bottenhårdhet β"
             value={`${sonarLevelLabels[context.hardnessClass]} (${context.vendorChannelA.toFixed(1)})`}
-            detail="Relativ Humminbird-bottenrespons"
+            detail="Experimentell relativ Humminbird-bottenrespons"
           />
         )}
         {context.vendorChannelB != null && (
@@ -605,11 +636,11 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
               context.distanceToVegetationM != null &&
               context.vegetationClass !== 'high'
                 ? `Tätare signal ${Math.round(context.distanceToVegetationM)} m bort`
-                : 'Relativ Humminbird-vegetationssignal'
+                : 'Experimentell relativ Humminbird-vegetationssignal'
             }
           />
         )}
-        {context.slopeDeg != null && (
+        {depthReliable && context.slopeDeg != null && (
           <SonarInfoBox
             label="Lutning"
             value={`${Math.round(context.slopeDeg)}°`}
@@ -624,7 +655,9 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
           label="Mätkvalitet"
           value={confidence}
           detail={
-            context.coverageConfidence != null
+            !depthReliable
+              ? 'Osäkra djup används inte för fångstanalys'
+              : context.coverageConfidence != null
               ? `${Math.round(context.coverageConfidence * 100)} % täckningssäkerhet`
               : context.signalDistanceM != null
                 ? `${Math.round(context.signalDistanceM)} m till sonarsignal`
