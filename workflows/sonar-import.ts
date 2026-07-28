@@ -449,6 +449,11 @@ async function runDerivedRpc(
     | 'sonar_enrich_motion'
     | 'sonar_enrich_motion_survey'
     | 'sonar_build_depth_cells'
+    | 'sonar_prepare_depth_cell_batches'
+    | 'sonar_accumulate_depth_cells_survey'
+    | 'sonar_finalize_depth_cells_batch'
+    | 'sonar_finalize_depth_terrain_batch'
+    | 'sonar_clear_depth_cell_survey_batch'
     | 'sonar_build_tracks'
     | 'sonar_build_contours'
     | 'sonar_match_catches',
@@ -562,9 +567,53 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
         'deriving',
         `Bygger djupkarta ${resolution} m`
       )
-      await runDerivedRpc(jobId, userId, 'sonar_build_depth_cells', {
+      await runDerivedRpc(jobId, userId, 'sonar_prepare_depth_cell_batches', {
         p_resolution_m: resolution,
       })
+      for (const surveyId of surveyIds) {
+        await runDerivedRpc(
+          jobId,
+          userId,
+          'sonar_accumulate_depth_cells_survey',
+          {
+            p_survey_id: surveyId,
+            p_resolution_m: resolution,
+          }
+        )
+      }
+      for (let bucket = 0; bucket < 32; bucket += 1) {
+        await runDerivedRpc(
+          jobId,
+          userId,
+          'sonar_finalize_depth_cells_batch',
+          {
+            p_resolution_m: resolution,
+            p_bucket: bucket,
+          }
+        )
+      }
+      for (let bucket = 0; bucket < 32; bucket += 1) {
+        await runDerivedRpc(
+          jobId,
+          userId,
+          'sonar_finalize_depth_terrain_batch',
+          {
+            p_resolution_m: resolution,
+            p_bucket: bucket,
+          }
+        )
+      }
+      for (const surveyId of surveyIds) {
+        await runDerivedRpc(
+          jobId,
+          userId,
+          'sonar_clear_depth_cell_survey_batch',
+          {
+            p_survey_id: surveyId,
+            p_resolution_m: resolution,
+          }
+        )
+      }
     }
 
     await updateJobStage(jobId, userId, 'deriving', 'Bygger spår')
