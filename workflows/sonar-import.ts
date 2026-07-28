@@ -447,11 +447,12 @@ async function runDerivedRpc(
   userId: string,
   functionName:
     | 'sonar_enrich_motion'
+    | 'sonar_enrich_motion_survey'
     | 'sonar_build_depth_cells'
     | 'sonar_build_tracks'
     | 'sonar_build_contours'
     | 'sonar_match_catches',
-  extra: Record<string, number> = {}
+  extra: Record<string, number | string> = {}
 ) {
   'use step'
 
@@ -463,6 +464,21 @@ async function runDerivedRpc(
   })
   if (error) throw new Error(`${functionName.toUpperCase()}_FAILED:${error.message}`)
   return Number(data ?? 0)
+}
+
+async function listSurveyIds(jobId: string, userId: string) {
+  'use step'
+
+  const admin = createAdminClient()
+  const { data, error } = await admin
+    .from('sonar_surveys')
+    .select('id')
+    .eq('job_id', jobId)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
+
+  if (error) throw new Error(`SURVEY_LIST_FAILED:${error.message}`)
+  return (data ?? []).map((survey) => survey.id)
 }
 
 async function completeJob(jobId: string, userId: string) {
@@ -532,7 +548,12 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
     }
 
     await updateJobStage(jobId, userId, 'deriving', 'Beräknar fart och kurs')
-    await runDerivedRpc(jobId, userId, 'sonar_enrich_motion')
+    const surveyIds = await listSurveyIds(jobId, userId)
+    for (const surveyId of surveyIds) {
+      await runDerivedRpc(jobId, userId, 'sonar_enrich_motion_survey', {
+        p_survey_id: surveyId,
+      })
+    }
 
     for (const resolution of [100, 50, 25, 10]) {
       await updateJobStage(
