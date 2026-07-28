@@ -523,10 +523,7 @@ export default function SonarImportClient() {
                         {job.files_total} filer
                       </div>
                     </div>
-                    {job.status === 'failed' &&
-                    job.sonar_import_files.some((file) =>
-                      ['uploaded', 'parsing'].includes(file.status)
-                    ) ? (
+                    {job.status === 'failed' ? (
                       <button
                         type="button"
                         onClick={() => resumeImport(job.id)}
