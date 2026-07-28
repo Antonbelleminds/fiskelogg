@@ -1088,9 +1088,9 @@ export default function KartaPage() {
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-lg pointer-events-auto dark:bg-slate-800">
             <h2 className="font-medium">Fångstplatserna kunde inte låsas upp</h2>
             <p className="mt-2 text-sm text-slate-500">
-              PIN-koden godkändes, men platserna är krypterade med en annan
-              nyckel. Ladda om sidan och ange samma Fiskepin som användes när
-              fångsterna krypterades.
+              PIN-koden verifierades, men Fiskepins säkerhetsmetadata matchar
+              inte metadata som användes när platserna krypterades. Dina
+              fångster är kvar och har inte ändrats.
             </p>
           </div>
         </div>

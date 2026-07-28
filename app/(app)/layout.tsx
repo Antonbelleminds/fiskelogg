@@ -31,19 +31,10 @@ function PinGate({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(false)
   const [pinPromptDismissed, setPinPromptDismissed] = useState(false)
 
-  // Load pin_hash/pin_salt from profile on mount (cached to avoid blocking)
+  // Always load the current key metadata from Supabase. A stale salt derives a
+  // different encryption key even when the user enters the same PIN.
   useEffect(() => {
-    // Check sessionStorage first (instant)
-    const cached = sessionStorage.getItem('fiskepin-profile')
-    if (cached) {
-      try {
-        const { pin_hash, pin_salt } = JSON.parse(cached)
-        if (pin_hash && pin_salt) setProfilePin(pin_hash, pin_salt)
-        setLoaded(true)
-        return
-      } catch {}
-    }
-
+    sessionStorage.removeItem('fiskepin-profile')
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) { setLoaded(true); return }
@@ -54,7 +45,8 @@ function PinGate({ children }: { children: React.ReactNode }) {
         .maybeSingle()
       if (data?.pin_hash && data?.pin_salt) {
         setProfilePin(data.pin_hash, data.pin_salt)
-        sessionStorage.setItem('fiskepin-profile', JSON.stringify({ pin_hash: data.pin_hash, pin_salt: data.pin_salt }))
+      } else {
+        setProfilePin(null, null)
       }
       setLoaded(true)
     })

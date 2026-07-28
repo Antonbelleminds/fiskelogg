@@ -769,6 +769,19 @@ function FiskepinSection({ userId }: { userId: string | null }) {
   const [error, setError] = useState('')
   const supabase = createClient()
 
+  async function getEncryptedCatchCount() {
+    if (!userId) return 0
+
+    const { count, error: countError } = await supabase
+      .from('catches')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('location_encrypted', true)
+
+    if (countError) throw countError
+    return count ?? 0
+  }
+
   async function handleSetPin() {
     if (!userId) return
     if (pinInput.length < 4 || pinInput.length > 6) {
@@ -783,6 +796,15 @@ function FiskepinSection({ userId }: { userId: string | null }) {
     setSaving(true)
     setError('')
     try {
+      const encryptedCatchCount = await getEncryptedCatchCount()
+      if (encryptedCatchCount > 0) {
+        setError(
+          `En ny Fiskepin kan inte skapas eftersom ${encryptedCatchCount} fångster redan är krypterade. ` +
+          'Den befintliga nyckelmetadatan måste återställas först.'
+        )
+        return
+      }
+
       const salt = generateSalt()
       const hash = await deriveVerificationHash(pinInput, salt)
 
@@ -800,7 +822,6 @@ function FiskepinSection({ userId }: { userId: string | null }) {
       setProfilePin(hash, salt)
       setPinInput('')
       setConfirmInput('')
-      sessionStorage.setItem('fiskepin-profile', JSON.stringify({ pin_hash: hash, pin_salt: salt }))
       setMessage('Fiskepin sparad! Ladda om sidan och ange din pin för att aktivera kryptering.')
     } catch {
       setError('Kunde inte spara pinkoden.')
@@ -814,6 +835,15 @@ function FiskepinSection({ userId }: { userId: string | null }) {
     setRemoving(true)
     setError('')
     try {
+      const encryptedCatchCount = await getEncryptedCatchCount()
+      if (encryptedCatchCount > 0) {
+        setError(
+          `Fiskepin kan inte tas bort medan ${encryptedCatchCount} fångster har krypterade platser. ` +
+          'Det skyddar platserna från att bli oläsbara.'
+        )
+        return
+      }
+
       const { error: dbError } = await supabase
         .from('user_secrets')
         .update({ pin_hash: null, pin_salt: null, updated_at: new Date().toISOString() })
@@ -822,8 +852,7 @@ function FiskepinSection({ userId }: { userId: string | null }) {
       if (dbError) throw dbError
 
       setProfilePin(null, null)
-      sessionStorage.removeItem('fiskepin-profile')
-      setMessage('Fiskepin borttagen. Befintligt krypterade platser förblir krypterade.')
+      setMessage('Fiskepin borttagen.')
     } catch {
       setError('Kunde inte ta bort pinkoden.')
     } finally {
