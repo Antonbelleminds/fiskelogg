@@ -70,6 +70,26 @@ function escapeHtml(value: unknown) {
     .replaceAll("'", '&#039;')
 }
 
+function fitLargestSonarSurvey(
+  map: mapboxgl.Map,
+  surveys: SonarSurvey[]
+) {
+  const survey = surveys
+    .filter((candidate) => (candidate.bounds?.coordinates?.[0]?.length ?? 0) > 0)
+    .sort((a, b) => b.point_count - a.point_count)[0]
+  const coordinates = survey?.bounds?.coordinates?.[0] ?? []
+  if (coordinates.length === 0) return
+
+  const west = Math.min(...coordinates.map((coordinate) => coordinate[0]))
+  const east = Math.max(...coordinates.map((coordinate) => coordinate[0]))
+  const south = Math.min(...coordinates.map((coordinate) => coordinate[1]))
+  const north = Math.max(...coordinates.map((coordinate) => coordinate[1]))
+  map.fitBounds(
+    [[west, south], [east, north]],
+    { padding: 48, maxZoom: 14 }
+  )
+}
+
 export default function KartaPage() {
   const { hasPinSet, isUnlocked, unlock } = usePin()
   const mapContainer = useRef<HTMLDivElement>(null)
@@ -668,20 +688,7 @@ export default function KartaPage() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !depthMap || surveys.length === 0) return
-
-    const coordinates = surveys.flatMap(
-      (survey) => survey.bounds?.coordinates?.[0] ?? []
-    )
-    if (coordinates.length === 0) return
-
-    const west = Math.min(...coordinates.map((coordinate) => coordinate[0]))
-    const east = Math.max(...coordinates.map((coordinate) => coordinate[0]))
-    const south = Math.min(...coordinates.map((coordinate) => coordinate[1]))
-    const north = Math.max(...coordinates.map((coordinate) => coordinate[1]))
-    map.fitBounds(
-      [[west, south], [east, north]],
-      { padding: 40, maxZoom: 14 }
-    )
+    fitLargestSonarSurvey(map, surveys)
   }, [depthMap, surveys])
 
   function toggleHeatmap() {
@@ -759,19 +766,7 @@ export default function KartaPage() {
     }
 
     if (next) {
-      const coordinates = surveys.flatMap(
-        (survey) => survey.bounds?.coordinates?.[0] ?? []
-      )
-      if (coordinates.length > 0) {
-        const west = Math.min(...coordinates.map((coordinate) => coordinate[0]))
-        const east = Math.max(...coordinates.map((coordinate) => coordinate[0]))
-        const south = Math.min(...coordinates.map((coordinate) => coordinate[1]))
-        const north = Math.max(...coordinates.map((coordinate) => coordinate[1]))
-        map.fitBounds(
-          [[west, south], [east, north]],
-          { padding: 40, maxZoom: 14 }
-        )
-      }
+      fitLargestSonarSurvey(map, surveys)
     }
   }
 
