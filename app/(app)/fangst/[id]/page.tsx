@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { sv } from 'date-fns/locale'
@@ -26,6 +27,32 @@ interface SonarEnrichment {
   matched_at: string
 }
 
+type SonarLevel = 'low' | 'medium' | 'high' | 'unknown'
+type DepthEdgeStatus = 'on_edge' | 'near_edge' | 'flat' | 'unknown'
+
+interface SonarLocationContext {
+  found: boolean
+  depthM: number | null
+  minDepthM: number | null
+  maxDepthM: number | null
+  slopeDeg: number | null
+  coverageConfidence: number | null
+  cellDistanceM: number | null
+  signalDistanceM: number | null
+  vendorChannelA: number | null
+  vendorChannelB: number | null
+  hardnessClass: SonarLevel
+  vegetationClass: SonarLevel
+  distanceToDepthEdgeM: number | null
+  depthEdgeSlopeDeg: number | null
+  depthEdgeStatus: DepthEdgeStatus
+  distanceToVegetationM: number | null
+  observedAt: string | null
+  waterTempC: number | null
+  boatSpeedMs: number | null
+  headingDeg: number | null
+}
+
 type CatchDetails = CatchWithProfile & {
   sonar_enrichment?: SonarEnrichment | null
 }
@@ -43,6 +70,8 @@ export default function CatchDetailPage() {
   const [editError, setEditError] = useState('')
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [editImagePosition, setEditImagePosition] = useState<string | null>(null)
+  const [sonarContext, setSonarContext] =
+    useState<SonarLocationContext | null>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -86,6 +115,48 @@ export default function CatchDetailPage() {
       } : null)
     })
   }, [isUnlocked, catchData, decrypt])
+
+  useEffect(() => {
+    const lat = catchData?.exif_lat
+    const lon = catchData?.exif_lng
+    const ownsCatch =
+      currentUserId != null && currentUserId === catchData?.user_id
+
+    if (!ownsCatch || lat == null || lon == null) {
+      return
+    }
+
+    const controller = new AbortController()
+
+    fetch(
+      `/api/sonar/inspect?lon=${encodeURIComponent(lon)}&lat=${encodeURIComponent(lat)}`,
+      { signal: controller.signal }
+    )
+      .then((response) => {
+        if (!response.ok) throw new Error('Sonar context failed')
+        return response.json() as Promise<SonarLocationContext>
+      })
+      .then((context) => {
+        if (!controller.signal.aborted) {
+          setSonarContext(context.found ? context : null)
+        }
+      })
+      .catch((error: unknown) => {
+        if (
+          !controller.signal.aborted &&
+          !(error instanceof DOMException && error.name === 'AbortError')
+        ) {
+          setSonarContext(null)
+        }
+      })
+
+    return () => controller.abort()
+  }, [
+    currentUserId,
+    catchData?.user_id,
+    catchData?.exif_lat,
+    catchData?.exif_lng,
+  ])
 
   const isOwner = currentUserId && catchData?.user_id === currentUserId
 
@@ -310,7 +381,9 @@ export default function CatchDetailPage() {
           {c.bottom_structure && <InfoBox label="Botten" value={c.bottom_structure} />}
         </div>
 
-        {c.sonar_enrichment && (
+        {sonarContext && <SonarContextCard context={sonarContext} />}
+
+        {!sonarContext && c.sonar_enrichment && (
           <div className="rounded-xl bg-cyan-50 p-4 dark:bg-cyan-950/20">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -446,6 +519,167 @@ export default function CatchDetailPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const sonarLevelLabels: Record<SonarLevel, string> = {
+  low: 'Låg',
+  medium: 'Medel',
+  high: 'Hög',
+  unknown: 'Saknas',
+}
+
+function SonarContextCard({ context }: { context: SonarLocationContext }) {
+  const edgeValue =
+    context.depthEdgeStatus === 'on_edge'
+      ? 'I en djupkant'
+      : context.depthEdgeStatus === 'near_edge'
+        ? 'Nära djupkant'
+        : context.depthEdgeStatus === 'flat'
+          ? 'Flackare område'
+          : 'Okänt'
+  const edgeDetail =
+    context.distanceToDepthEdgeM != null
+      ? `${Math.round(context.distanceToDepthEdgeM)} m till brantaste kanten`
+      : context.slopeDeg != null
+        ? `${Math.round(context.slopeDeg)}° lokal lutning`
+        : undefined
+  const confidence =
+    context.coverageConfidence == null
+      ? 'Okänd'
+      : context.coverageConfidence >= 0.75
+        ? 'Hög'
+        : context.coverageConfidence >= 0.45
+          ? 'Medel'
+          : 'Låg'
+
+  return (
+    <section className="rounded-2xl border border-cyan-200 bg-gradient-to-br from-cyan-50 to-sky-50 p-4 dark:border-cyan-900 dark:from-cyan-950/30 dark:to-sky-950/20">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-cyan-950 dark:text-cyan-100">
+            Ekolodsdata vid fångstplatsen
+          </h2>
+          <p className="mt-0.5 text-[11px] leading-4 text-cyan-700 dark:text-cyan-300">
+            Matchat mot din privata Humminbird-djupkarta
+            {context.cellDistanceM != null
+              ? ` · ${Math.round(context.cellDistanceM)} m till mätområdet`
+              : ''}
+          </p>
+        </div>
+        <span className="rounded-full bg-white/80 px-2 py-1 text-[9px] font-semibold uppercase tracking-wide text-cyan-800 dark:bg-cyan-950 dark:text-cyan-200">
+          Sonar
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {context.depthM != null && (
+          <SonarInfoBox
+            label="Djup"
+            value={`${context.depthM.toFixed(1)} m`}
+            detail={
+              context.minDepthM != null && context.maxDepthM != null
+                ? `${context.minDepthM.toFixed(1)}–${context.maxDepthM.toFixed(1)} m i mätcellen`
+                : 'Från interpolerad djupyta'
+            }
+          />
+        )}
+        <SonarInfoBox
+          label="Djupkant"
+          value={edgeValue}
+          detail={edgeDetail}
+        />
+        {context.vendorChannelA != null && (
+          <SonarInfoBox
+            label="Bottenhårdhet β"
+            value={`${sonarLevelLabels[context.hardnessClass]} (${context.vendorChannelA.toFixed(1)})`}
+            detail="Relativ Humminbird-bottenrespons"
+          />
+        )}
+        {context.vendorChannelB != null && (
+          <SonarInfoBox
+            label="Vegetation β"
+            value={`${sonarLevelLabels[context.vegetationClass]} (${context.vendorChannelB.toFixed(1)})`}
+            detail={
+              context.distanceToVegetationM != null &&
+              context.vegetationClass !== 'high'
+                ? `Tätare signal ${Math.round(context.distanceToVegetationM)} m bort`
+                : 'Relativ Humminbird-vegetationssignal'
+            }
+          />
+        )}
+        {context.slopeDeg != null && (
+          <SonarInfoBox
+            label="Lutning"
+            value={`${Math.round(context.slopeDeg)}°`}
+            detail={
+              context.depthEdgeSlopeDeg != null
+                ? `Närmaste kant ${Math.round(context.depthEdgeSlopeDeg)}°`
+                : 'Beräknad från djupytan'
+            }
+          />
+        )}
+        <SonarInfoBox
+          label="Mätkvalitet"
+          value={confidence}
+          detail={
+            context.coverageConfidence != null
+              ? `${Math.round(context.coverageConfidence * 100)} % täckningssäkerhet`
+              : context.signalDistanceM != null
+                ? `${Math.round(context.signalDistanceM)} m till sonarsignal`
+                : undefined
+          }
+        />
+        {context.waterTempC != null && (
+          <SonarInfoBox
+            label="Vattentemperatur"
+            value={`${context.waterTempC.toFixed(1)} °C`}
+          />
+        )}
+        {context.boatSpeedMs != null && (
+          <SonarInfoBox
+            label="Båtfart vid mätning"
+            value={`${context.boatSpeedMs.toFixed(1)} m/s`}
+          />
+        )}
+      </div>
+
+      <div className="mt-3 flex items-center justify-between border-t border-cyan-200/70 pt-3 text-[10px] text-cyan-700 dark:border-cyan-900 dark:text-cyan-300">
+        <span>Ändrar inte fångstens manuella uppgifter</span>
+        <Link
+          href="/karta?djupkarta=1"
+          className="font-semibold hover:text-cyan-950 dark:hover:text-white"
+        >
+          Visa kartan →
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+function SonarInfoBox({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: string
+  detail?: string
+}) {
+  return (
+    <div className="rounded-xl border border-white/80 bg-white/75 p-3 shadow-sm dark:border-cyan-900/70 dark:bg-slate-900/60">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-cyan-700 dark:text-cyan-300">
+        {label}
+      </div>
+      <div className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-white">
+        {value}
+      </div>
+      {detail ? (
+        <div className="mt-1 text-[9px] leading-3 text-slate-500 dark:text-slate-400">
+          {detail}
+        </div>
+      ) : null}
     </div>
   )
 }
