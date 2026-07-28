@@ -24,7 +24,50 @@ interface MapCatch {
   profiles?: { username: string; display_name: string | null; avatar_url: string | null } | null
 }
 
+interface SonarSurvey {
+  id: string
+  name: string
+  point_count: number
+  min_depth_m: number | null
+  max_depth_m: number | null
+  bounds: {
+    type: 'Polygon'
+    coordinates: number[][][]
+  } | null
+}
+
+interface SonarInspection {
+  found: boolean
+  depthM: number | null
+  minDepthM: number | null
+  maxDepthM: number | null
+  slopeDeg: number | null
+  bottomHardness: number | null
+  vegetationHeightM: number | null
+  vendorChannelA: number | null
+  vendorChannelB: number | null
+  waterTempC: number | null
+  boatSpeedMs: number | null
+  headingDeg: number | null
+  catchCount: number
+  avgWeightKg: number | null
+  maxWeightKg: number | null
+  nearestCatchM: number | null
+  bottomClassification: string
+}
+
 type MapFilter = 'mine' | 'all'
+
+const mapsWithInteractionHandlers = new WeakSet<object>()
+
+function escapeHtml(value: unknown) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
 
 export default function KartaPage() {
   const mapContainer = useRef<HTMLDivElement>(null)
@@ -37,9 +80,12 @@ export default function KartaPage() {
   const [heatmap, setHeatmap] = useState(false)
   const [mapFilter, setMapFilter] = useState<MapFilter>('mine')
   const [satellite, setSatellite] = useState(false)
+  const [depthMap, setDepthMap] = useState(false)
+  const [surveys, setSurveys] = useState<SonarSurvey[]>([])
 
   // Refs to track current visibility state (needed after style reload)
   const heatmapRef = useRef(false)
+  const depthMapRef = useRef(false)
   const mapFilterRef = useRef<MapFilter>('mine')
   const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
   const friendFeaturesRef = useRef<GeoJSON.Feature[]>([])
@@ -66,6 +112,18 @@ export default function KartaPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('djupkarta') === '1') {
+      setDepthMap(true)
+      depthMapRef.current = true
+    }
+
+    fetch('/api/sonar/surveys')
+      .then((response) => (response.ok ? response.json() : []))
+      .then((data) => setSurveys(Array.isArray(data) ? data : []))
+      .catch(() => {})
   }, [])
 
   // Decrypt encrypted catches when PIN is unlocked
@@ -155,8 +213,12 @@ export default function KartaPage() {
   useEffect(() => {
     if (!mapContainer.current || loading) return
 
+    let disposed = false
+    let initializedMap: mapboxgl.Map | null = null
+
     async function initMap() {
       const mapboxgl = (await import('mapbox-gl')).default
+      if (disposed || !mapContainer.current) return
       if (!document.querySelector('link[href*="mapbox-gl"]')) {
         const link = document.createElement('link')
         link.rel = 'stylesheet'
@@ -173,6 +235,7 @@ export default function KartaPage() {
         zoom: 4,
       })
 
+      initializedMap = map
       mapRef.current = map
 
       map.addControl(new mapboxgl.NavigationControl(), 'top-right')
@@ -220,6 +283,8 @@ export default function KartaPage() {
       function addSourcesAndLayers() {
         // Remove existing sources/layers if they exist (safety)
         const layerIds = [
+          'sonar-depth-fill', 'sonar-hillshade', 'sonar-contours',
+          'sonar-tracks', 'sonar-waypoints',
           'clusters', 'cluster-count', 'unclustered-point',
           'friend-clusters', 'friend-cluster-count', 'friend-unclustered-point',
           'catches-heat',
@@ -229,6 +294,98 @@ export default function KartaPage() {
         })
         if (map.getSource('catches')) map.removeSource('catches')
         if (map.getSource('friend-catches')) map.removeSource('friend-catches')
+        if (map.getSource('sonar-depth')) map.removeSource('sonar-depth')
+
+        const showDepth = depthMapRef.current
+
+        map.addSource('sonar-depth', {
+          type: 'vector',
+          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}`],
+          minzoom: 0,
+          maxzoom: 18,
+        })
+
+        map.addLayer({
+          id: 'sonar-depth-fill',
+          type: 'fill',
+          source: 'sonar-depth',
+          'source-layer': 'depth_cells',
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['coalesce', ['get', 'depth'], 0],
+              0, '#dff6ff',
+              2, '#75d5f0',
+              5, '#2b9fbd',
+              10, '#176b87',
+              20, '#12324a',
+              50, '#071a2b',
+            ],
+            'fill-opacity': 0.72,
+            'fill-outline-color': 'rgba(255,255,255,0.08)',
+          },
+          layout: { visibility: showDepth ? 'visible' : 'none' },
+        })
+
+        map.addLayer({
+          id: 'sonar-hillshade',
+          type: 'fill',
+          source: 'sonar-depth',
+          'source-layer': 'depth_cells',
+          paint: {
+            'fill-color': '#020617',
+            'fill-opacity': [
+              'interpolate',
+              ['linear'],
+              ['coalesce', ['get', 'hillshade'], 1],
+              0, 0.32,
+              0.5, 0.12,
+              1, 0,
+            ],
+          },
+          layout: { visibility: showDepth ? 'visible' : 'none' },
+        })
+
+        map.addLayer({
+          id: 'sonar-contours',
+          type: 'line',
+          source: 'sonar-depth',
+          'source-layer': 'contours',
+          paint: {
+            'line-color': 'rgba(255,255,255,0.8)',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.4, 16, 1.5],
+            'line-opacity': 0.8,
+          },
+          layout: { visibility: showDepth ? 'visible' : 'none' },
+        })
+
+        map.addLayer({
+          id: 'sonar-tracks',
+          type: 'line',
+          source: 'sonar-depth',
+          'source-layer': 'tracks',
+          paint: {
+            'line-color': '#fbbf24',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 16, 2.5],
+            'line-opacity': 0.8,
+          },
+          layout: { visibility: showDepth ? 'visible' : 'none' },
+        })
+
+        map.addLayer({
+          id: 'sonar-waypoints',
+          type: 'circle',
+          source: 'sonar-depth',
+          'source-layer': 'waypoints',
+          paint: {
+            'circle-color': '#f59e0b',
+            'circle-radius': 5,
+            'circle-stroke-color': '#fff',
+            'circle-stroke-width': 1.5,
+          },
+          layout: { visibility: showDepth ? 'visible' : 'none' },
+        })
 
         // Own catches source
         map.addSource('catches', {
@@ -362,6 +519,9 @@ export default function KartaPage() {
           layout: { visibility: showHeat ? 'visible' : 'none' },
         })
 
+        if (mapsWithInteractionHandlers.has(map)) return
+        mapsWithInteractionHandlers.add(map)
+
         // Click on own cluster to zoom
         map.on('click', 'clusters', (e) => {
           const feats = map.queryRenderedFeatures(e.point, { layers: ['clusters'] })
@@ -395,11 +555,11 @@ export default function KartaPage() {
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
-                <div style="font-weight:600">${props.species}</div>
+                <div style="font-weight:600">${escapeHtml(props.species)}</div>
                 ${details ? `<div style="font-size:13px;color:#64748b">${details}</div>` : ''}
-                ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${props.water_body}</div>` : ''}
+                ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${escapeHtml(props.water_body)}</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
-                <a href="/fangst/${props.id}" style="display:block;margin-top:6px;font-size:12px;color:#27272a;text-decoration:none;font-weight:500">Visa detaljer &rarr;</a>
+                <a href="/fangst/${encodeURIComponent(props.id)}" style="display:block;margin-top:6px;font-size:12px;color:#27272a;text-decoration:none;font-weight:500">Visa detaljer &rarr;</a>
               </div>
             </div>
           `
@@ -417,10 +577,10 @@ export default function KartaPage() {
           const html = `
             <div style="max-width:200px;font-family:system-ui">
               <div style="padding:8px">
-                <div style="font-size:11px;color:#64748b;font-weight:500;margin-bottom:2px">${props.friend_name}</div>
-                <div style="font-weight:600">${props.species}</div>
+                <div style="font-size:11px;color:#64748b;font-weight:500;margin-bottom:2px">${escapeHtml(props.friend_name)}</div>
+                <div style="font-weight:600">${escapeHtml(props.species)}</div>
                 ${details ? `<div style="font-size:13px;color:#64748b">${details}</div>` : ''}
-                ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${props.water_body}</div>` : ''}
+                ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${escapeHtml(props.water_body)}</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
               </div>
             </div>
@@ -428,8 +588,55 @@ export default function KartaPage() {
           new mapboxgl.Popup({ offset: 15 }).setLngLat(coords).setHTML(html).addTo(map)
         })
 
+        map.on('click', 'sonar-depth-fill', async (e) => {
+          if (!depthMapRef.current) return
+          const { lng, lat } = e.lngLat
+          const popup = new mapboxgl.Popup({ offset: 12 })
+            .setLngLat([lng, lat])
+            .setHTML('<div style="padding:8px;font-family:system-ui">Analyserar…</div>')
+            .addTo(map)
+
+          try {
+            const response = await fetch(
+              `/api/sonar/inspect?lon=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}`
+            )
+            if (!response.ok) throw new Error('Inspect failed')
+            const info = (await response.json()) as SonarInspection
+            if (!info.found) {
+              popup.setHTML('<div style="padding:8px;font-family:system-ui">Ingen mätning inom 100 meter.</div>')
+              return
+            }
+
+            const row = (label: string, value: string) =>
+              `<div style="display:flex;justify-content:space-between;gap:20px;margin-top:5px"><span style="color:#64748b">${label}</span><strong>${value}</strong></div>`
+            const optionalRows = [
+              info.waterTempC != null ? row('Vattentemperatur', `${info.waterTempC.toFixed(1)} °C`) : '',
+              info.boatSpeedMs != null ? row('Båtfart', `${info.boatSpeedMs.toFixed(1)} m/s`) : '',
+              info.nearestCatchM != null ? row('Närmaste fångst', `${Math.round(info.nearestCatchM)} m`) : '',
+              info.avgWeightKg != null ? row('Medelvikt', `${info.avgWeightKg.toFixed(1)} kg`) : '',
+              info.maxWeightKg != null ? row('Största fisk', `${info.maxWeightKg.toFixed(1)} kg`) : '',
+            ].join('')
+
+            popup.setHTML(`
+              <div style="min-width:210px;padding:8px;font-family:system-ui;font-size:13px">
+                <div style="font-weight:700;font-size:14px;margin-bottom:8px">Egen djupkarta</div>
+                ${row('Djup', info.depthM != null ? `${info.depthM.toFixed(1)} m` : '–')}
+                ${row('Botten', escapeHtml(info.bottomClassification || 'Ej klassificerad'))}
+                ${row('Lutning', info.slopeDeg != null ? `${Math.round(info.slopeDeg)}°` : '–')}
+                ${row('Fångster här', String(info.catchCount ?? 0))}
+                ${optionalRows}
+                ${info.bottomHardness == null && info.vendorChannelA != null
+                  ? '<div style="margin-top:8px;color:#94a3b8;font-size:11px">Humminbirds råa bottenkanal sparas men visas inte som hårdhet förrän kanalens skala är verifierad.</div>'
+                  : ''}
+              </div>
+            `)
+          } catch {
+            popup.setHTML('<div style="padding:8px;font-family:system-ui">Kunde inte läsa punktinformationen.</div>')
+          }
+        })
+
         // Cursors
-        const pointerLayers = ['clusters', 'unclustered-point', 'friend-clusters', 'friend-unclustered-point']
+        const pointerLayers = ['sonar-depth-fill', 'clusters', 'unclustered-point', 'friend-clusters', 'friend-unclustered-point']
         pointerLayers.forEach((layer) => {
           map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
           map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = '' })
@@ -450,11 +657,34 @@ export default function KartaPage() {
         }
       })
 
-      return () => map.remove()
     }
 
-    initMap()
+    void initMap()
+    return () => {
+      disposed = true
+      initializedMap?.remove()
+      if (mapRef.current === initializedMap) mapRef.current = null
+    }
   }, [catches, friendCatches, loading])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !depthMap || surveys.length === 0) return
+
+    const coordinates = surveys.flatMap(
+      (survey) => survey.bounds?.coordinates?.[0] ?? []
+    )
+    if (coordinates.length === 0) return
+
+    const west = Math.min(...coordinates.map((coordinate) => coordinate[0]))
+    const east = Math.max(...coordinates.map((coordinate) => coordinate[0]))
+    const south = Math.min(...coordinates.map((coordinate) => coordinate[1]))
+    const north = Math.max(...coordinates.map((coordinate) => coordinate[1]))
+    map.fitBounds(
+      [[west, south], [east, north]],
+      { padding: 40, maxZoom: 14 }
+    )
+  }, [depthMap, surveys])
 
   function toggleHeatmap() {
     const map = mapRef.current
@@ -497,6 +727,41 @@ export default function KartaPage() {
         ? 'mapbox://styles/mapbox/satellite-streets-v12'
         : 'mapbox://styles/mapbox/outdoors-v12'
     )
+  }
+
+  function toggleDepthMap() {
+    const map = mapRef.current
+    if (!map) return
+    const next = !depthMap
+    setDepthMap(next)
+    depthMapRef.current = next
+
+    const visibility = next ? 'visible' : 'none'
+    for (const layer of [
+      'sonar-depth-fill',
+      'sonar-hillshade',
+      'sonar-contours',
+      'sonar-tracks',
+      'sonar-waypoints',
+    ]) {
+      if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', visibility)
+    }
+
+    if (next) {
+      const coordinates = surveys.flatMap(
+        (survey) => survey.bounds?.coordinates?.[0] ?? []
+      )
+      if (coordinates.length > 0) {
+        const west = Math.min(...coordinates.map((coordinate) => coordinate[0]))
+        const east = Math.max(...coordinates.map((coordinate) => coordinate[0]))
+        const south = Math.min(...coordinates.map((coordinate) => coordinate[1]))
+        const north = Math.max(...coordinates.map((coordinate) => coordinate[1]))
+        map.fitBounds(
+          [[west, south], [east, north]],
+          { padding: 40, maxZoom: 14 }
+        )
+      }
+    }
   }
 
   const totalWithCoords = catches.filter((c) => c.exif_lat).length
@@ -558,7 +823,18 @@ export default function KartaPage() {
       </div>
 
       {/* Bottom controls */}
-      <div className="absolute bottom-6 left-4 flex gap-2 z-10">
+      <div className="absolute bottom-6 left-4 right-4 flex flex-wrap gap-2 z-10">
+        <button
+          onClick={toggleDepthMap}
+          disabled={surveys.length === 0}
+          className={`px-3 py-2 rounded-lg text-xs font-medium shadow-md transition disabled:opacity-40 ${
+            depthMap
+              ? 'bg-cyan-800 text-white'
+              : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+          }`}
+        >
+          Djupkarta
+        </button>
         <button
           onClick={toggleStyle}
           className={`px-3 py-2 rounded-lg text-xs font-medium shadow-md transition ${
@@ -605,7 +881,7 @@ export default function KartaPage() {
         </div>
       )}
 
-      {catches.filter((c) => c.exif_lat).length === 0 && !loading && (
+      {catches.filter((c) => c.exif_lat).length === 0 && surveys.length === 0 && !loading && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 text-center shadow-lg pointer-events-auto">
             <div className="mb-2 flex justify-center text-slate-300">

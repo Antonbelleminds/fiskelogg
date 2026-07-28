@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getCache, setCache } from '@/lib/cache'
@@ -718,6 +719,31 @@ export default function ProfilPage() {
       </div>
 
       {/* Logout */}
+      {/* Settings */}
+      <div className="mb-6">
+        <h2 className="text-lg font-semibold mb-3">Inställningar</h2>
+        <Link
+          href="/installningar/ekolodsimport"
+          className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
+        >
+          <span>
+            <span className="block text-sm font-medium">Importera ekolodsdata</span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              SD-kort, egna djupkartor och fångstmatchning
+            </span>
+          </span>
+          <svg
+            className="h-5 w-5 text-slate-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" />
+          </svg>
+        </Link>
+      </div>
+
       {/* Fiskepin */}
       <FiskepinSection userId={userId} />
 

@@ -64,7 +64,8 @@ function sanitizeSolunarStrength(value: unknown): number | null {
   return n >= 1 && n <= 5 ? n : null
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const admin = createAdminClient()
     const { data, error } = await admin
@@ -119,6 +120,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       }
     }
 
+    if (isOwner) {
+      const { data: sonarEnrichment } = await admin
+        .from('catch_sonar_enrichments')
+        .select(
+          'job_id, survey_id, match_distance_m, match_time_delta_seconds, depth_m, bottom_hardness, slope_deg, distance_to_dropoff_m, distance_to_vegetation_m, distance_to_structure_m, water_temp_c, boat_speed_ms, heading_deg, matched_at'
+        )
+        .eq('catch_id', params.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      data.sonar_enrichment = sonarEnrichment ?? null
+    }
+
     return NextResponse.json(data)
   } catch (error) {
     console.error('Get catch error:', error)
@@ -126,7 +140,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -179,7 +194,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const supabase = await createServerSupabaseClient()
     const { data: { user } } = await supabase.auth.getUser()

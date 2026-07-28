@@ -11,11 +11,30 @@ import { SolunarDayBar, SolunarStrengthPills } from '@/components/catches/Soluna
 import type { CatchWithProfile } from '@/types/database'
 import { usePin } from '@/contexts/PinContext'
 
+interface SonarEnrichment {
+  match_distance_m: number
+  match_time_delta_seconds: number
+  depth_m: number | null
+  bottom_hardness: number | null
+  slope_deg: number | null
+  distance_to_dropoff_m: number | null
+  distance_to_vegetation_m: number | null
+  distance_to_structure_m: number | null
+  water_temp_c: number | null
+  boat_speed_ms: number | null
+  heading_deg: number | null
+  matched_at: string
+}
+
+type CatchDetails = CatchWithProfile & {
+  sonar_enrichment?: SonarEnrichment | null
+}
+
 export default function CatchDetailPage() {
   const { id } = useParams()
   const router = useRouter()
   const { isUnlocked, decrypt } = usePin()
-  const [catchData, setCatchData] = useState<CatchWithProfile | null>(null)
+  const [catchData, setCatchData] = useState<CatchDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [liked, setLiked] = useState(false)
   const [likesCount, setLikesCount] = useState(0)
@@ -290,6 +309,44 @@ export default function CatchDetailPage() {
           {c.depth_m && <InfoBox label="Djup" value={`${c.depth_m} m`} />}
           {c.bottom_structure && <InfoBox label="Botten" value={c.bottom_structure} />}
         </div>
+
+        {c.sonar_enrichment && (
+          <div className="rounded-xl bg-cyan-50 p-4 dark:bg-cyan-950/20">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-cyan-900 dark:text-cyan-100">
+                  Matchad ekolodsdata
+                </h2>
+                <p className="mt-0.5 text-[11px] text-cyan-700 dark:text-cyan-300">
+                  Separat från dina manuella fångstfält · {Math.round(c.sonar_enrichment.match_distance_m)} m bort
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs text-cyan-900 dark:text-cyan-100">
+              {c.sonar_enrichment.depth_m != null && (
+                <span>Djup: {c.sonar_enrichment.depth_m.toFixed(1)} m</span>
+              )}
+              {c.sonar_enrichment.slope_deg != null && (
+                <span>Lutning: {Math.round(c.sonar_enrichment.slope_deg)}°</span>
+              )}
+              {c.sonar_enrichment.water_temp_c != null && (
+                <span>Vattentemp: {c.sonar_enrichment.water_temp_c.toFixed(1)}°C</span>
+              )}
+              {c.sonar_enrichment.boat_speed_ms != null && (
+                <span>Båtfart: {c.sonar_enrichment.boat_speed_ms.toFixed(1)} m/s</span>
+              )}
+              {c.sonar_enrichment.heading_deg != null && (
+                <span>Kurs: {Math.round(c.sonar_enrichment.heading_deg)}°</span>
+              )}
+              {c.sonar_enrichment.distance_to_dropoff_m != null && (
+                <span>Brant kant: {Math.round(c.sonar_enrichment.distance_to_dropoff_m)} m</span>
+              )}
+              {c.sonar_enrichment.distance_to_structure_m != null && (
+                <span>Struktur: {Math.round(c.sonar_enrichment.distance_to_structure_m)} m</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Weather section */}
         {c.weather_condition && (

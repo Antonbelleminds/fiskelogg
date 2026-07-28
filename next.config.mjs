@@ -1,3 +1,10 @@
+import { withWorkflow } from 'workflow/next'
+import { fileURLToPath } from 'node:url'
+
+const xdgAppPathsShim = fileURLToPath(
+  new URL('./lib/sonar/xdg-app-paths-shim.cjs', import.meta.url)
+)
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
@@ -9,6 +16,10 @@ const nextConfig = {
       },
     ],
   },
+  webpack(config) {
+    config.resolve.alias['xdg-app-paths'] = xdgAppPathsShim
+    return config
+  },
 };
 
-export default nextConfig;
+export default withWorkflow(nextConfig);
