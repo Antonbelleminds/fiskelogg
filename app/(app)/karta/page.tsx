@@ -403,11 +403,15 @@ export default function KartaPage() {
           source: 'sonar-depth',
           'source-layer': 'contours',
           paint: {
-            'line-color': 'rgba(15,23,42,0.72)',
+            'line-color': 'rgba(15,23,42,0.66)',
             'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.3, 16, 1.25],
-            'line-opacity': 0.75,
+            'line-opacity': 0.68,
           },
-          layout: { visibility: showDepth ? 'visible' : 'none' },
+          layout: {
+            visibility: showDepth ? 'visible' : 'none',
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
         })
 
         map.addLayer({
