@@ -978,11 +978,8 @@ export default function KartaPage() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !depthMap || surveys.length === 0) return
-    if (catches.some(caught => caught.exif_lat != null && caught.exif_lng != null)) {
-      return
-    }
     fitLargestSonarSurvey(map, surveys)
-  }, [depthMap, surveys, mapGeneration, catches])
+  }, [depthMap, surveys, mapGeneration])
 
   function toggleHeatmap() {
     const map = mapRef.current
