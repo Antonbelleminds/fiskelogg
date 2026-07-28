@@ -35,6 +35,10 @@ interface SonarSurvey {
     type: 'Polygon'
     coordinates: number[][][]
   } | null
+  focus?: {
+    type: 'Point'
+    coordinates: [number, number]
+  } | null
 }
 
 interface SonarInspection {
@@ -74,6 +78,20 @@ function fitLargestSonarSurvey(
   map: mapboxgl.Map,
   surveys: SonarSurvey[]
 ) {
+  const focus = surveys.find(
+    (survey) =>
+      survey.focus?.type === 'Point' &&
+      survey.focus.coordinates.length === 2
+  )?.focus
+  if (focus) {
+    map.easeTo({
+      center: focus.coordinates,
+      zoom: 14,
+      duration: 900,
+    })
+    return
+  }
+
   const survey = surveys
     .filter((candidate) => (candidate.bounds?.coordinates?.[0]?.length ?? 0) > 0)
     .sort((a, b) => b.point_count - a.point_count)[0]

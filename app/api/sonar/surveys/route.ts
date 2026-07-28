@@ -35,7 +35,26 @@ export async function GET() {
     )
   }
 
-  return NextResponse.json(data ?? [], {
+  const { data: focusCell, error: focusError } = await admin
+    .from('sonar_depth_cells')
+    .select('centroid')
+    .eq('user_id', user.id)
+    .eq('resolution_m', 10)
+    .order('sample_count', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (focusError) {
+    console.error('Sonar survey focus failed:', focusError)
+  }
+
+  const surveys = (data ?? []).map((survey, index) =>
+    index === 0
+      ? { ...survey, focus: focusCell?.centroid ?? null }
+      : survey
+  )
+
+  return NextResponse.json(surveys, {
     headers: { 'Cache-Control': 'private, max-age=30' },
   })
 }
