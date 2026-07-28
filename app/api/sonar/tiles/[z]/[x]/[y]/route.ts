@@ -13,7 +13,7 @@ function tileCoordinate(value: string) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   props: { params: Promise<{ z: string; x: string; y: string }> }
 ) {
   const params = await props.params;
@@ -39,7 +39,12 @@ export async function GET(
   }
 
   const admin = createAdminClient()
-  const { data, error } = await admin.rpc('sonar_vector_tile', {
+  const surface = new URL(request.url).searchParams.get('surface')
+  const tileFunction =
+    surface === 'signals'
+      ? 'sonar_signal_vector_tile'
+      : 'sonar_vector_tile'
+  const { data, error } = await admin.rpc(tileFunction, {
     p_user_id: user.id,
     p_z: z,
     p_x: x,
@@ -47,7 +52,7 @@ export async function GET(
   })
 
   if (error) {
-    console.error('Sonar vector tile failed:', error)
+    console.error(`${tileFunction} failed:`, error)
     return new NextResponse(null, { status: 500 })
   }
 

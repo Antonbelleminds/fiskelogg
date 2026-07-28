@@ -62,6 +62,7 @@ interface SonarInspection {
 }
 
 type MapFilter = 'mine' | 'all'
+type SonarLayerMode = 'depth' | 'hardness' | 'vegetation'
 
 const mapsWithInteractionHandlers = new WeakSet<object>()
 
@@ -121,6 +122,10 @@ export default function KartaPage() {
   const [mapFilter, setMapFilter] = useState<MapFilter>('mine')
   const [satellite, setSatellite] = useState(false)
   const [depthMap, setDepthMap] = useState(false)
+  const [sonarLayerMode, setSonarLayerMode] =
+    useState<SonarLayerMode>('depth')
+  const [showSonarContours, setShowSonarContours] = useState(true)
+  const [showSonarHillshade, setShowSonarHillshade] = useState(true)
   const [showSonarTracks, setShowSonarTracks] = useState(false)
   const [surveys, setSurveys] = useState<SonarSurvey[]>([])
   const [mapGeneration, setMapGeneration] = useState(0)
@@ -130,6 +135,9 @@ export default function KartaPage() {
   // Refs to track current visibility state (needed after style reload)
   const heatmapRef = useRef(false)
   const depthMapRef = useRef(false)
+  const sonarLayerModeRef = useRef<SonarLayerMode>('depth')
+  const sonarContoursRef = useRef(true)
+  const sonarHillshadeRef = useRef(true)
   const sonarTracksRef = useRef(false)
   const mapFilterRef = useRef<MapFilter>('mine')
   const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
@@ -255,6 +263,40 @@ export default function KartaPage() {
     updateMapFilter(null)
   }
 
+  const syncSonarLayerVisibility = useCallback((map: mapboxgl.Map) => {
+    const active = depthMapRef.current
+    const mode = sonarLayerModeRef.current
+    const setVisibility = (layerId: string, visible: boolean) => {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(
+          layerId,
+          'visibility',
+          visible ? 'visible' : 'none'
+        )
+      }
+    }
+
+    setVisibility('sonar-depth-fill', active && mode === 'depth')
+    setVisibility('sonar-hardness-fill', active && mode === 'hardness')
+    setVisibility('sonar-vegetation-fill', active && mode === 'vegetation')
+    setVisibility(
+      'sonar-hillshade',
+      active && sonarHillshadeRef.current
+    )
+    for (const layerId of [
+      'sonar-contours-minor',
+      'sonar-contours-major',
+      'sonar-contour-labels',
+    ]) {
+      setVisibility(layerId, active && sonarContoursRef.current)
+    }
+    setVisibility('sonar-waypoints', active)
+    setVisibility(
+      'sonar-tracks',
+      active && sonarTracksRef.current
+    )
+  }, [])
+
   useEffect(() => {
     if (!mapContainer.current || loading) return
 
@@ -322,7 +364,10 @@ export default function KartaPage() {
       function addSourcesAndLayers() {
         // Remove existing sources/layers if they exist (safety)
         const layerIds = [
-          'sonar-depth-fill', 'sonar-hillshade', 'sonar-contours',
+          'sonar-depth-fill', 'sonar-hardness-fill',
+          'sonar-vegetation-fill', 'sonar-hillshade',
+          'sonar-contours-minor', 'sonar-contours-major',
+          'sonar-contour-labels',
           'sonar-tracks', 'sonar-waypoints',
           'clusters', 'cluster-count', 'unclustered-point',
           'friend-clusters', 'friend-cluster-count', 'friend-unclustered-point',
@@ -334,13 +379,24 @@ export default function KartaPage() {
         if (map.getSource('catches')) map.removeSource('catches')
         if (map.getSource('friend-catches')) map.removeSource('friend-catches')
         if (map.getSource('sonar-depth')) map.removeSource('sonar-depth')
+        if (map.getSource('sonar-signals')) map.removeSource('sonar-signals')
 
         const showDepth = depthMapRef.current
+        const sonarMode = sonarLayerModeRef.current
         const showTracks = showDepth && sonarTracksRef.current
 
         map.addSource('sonar-depth', {
           type: 'vector',
           tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=2`],
+          minzoom: 0,
+          maxzoom: 18,
+        })
+
+        map.addSource('sonar-signals', {
+          type: 'vector',
+          tiles: [
+            `${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=signals`,
+          ],
           minzoom: 0,
           maxzoom: 18,
         })
@@ -378,7 +434,92 @@ export default function KartaPage() {
             'fill-antialias': false,
             'fill-outline-color': 'rgba(0,0,0,0)',
           },
-          layout: { visibility: showDepth ? 'visible' : 'none' },
+          layout: {
+            visibility:
+              showDepth && sonarMode === 'depth' ? 'visible' : 'none',
+          },
+        })
+
+        map.addLayer({
+          id: 'sonar-hardness-fill',
+          type: 'fill',
+          source: 'sonar-signals',
+          'source-layer': 'signals',
+          filter: [
+            '>=',
+            ['to-number', ['get', 'hardness_signal'], -1],
+            0,
+          ],
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'hardness_signal'], 0],
+              0, '#f8fafc',
+              2.5, '#d6d3d1',
+              4.5, '#fde68a',
+              6.5, '#fbbf24',
+              9.7, '#f97316',
+              18.2, '#7c2d12',
+              30, '#1c1917',
+            ],
+            'fill-opacity': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'samples'], 1],
+              1, 0.55,
+              8, 0.76,
+              30, 0.9,
+            ],
+            'fill-antialias': false,
+            'fill-outline-color': 'rgba(255,255,255,0.12)',
+          },
+          layout: {
+            visibility:
+              showDepth && sonarMode === 'hardness' ? 'visible' : 'none',
+          },
+        })
+
+        map.addLayer({
+          id: 'sonar-vegetation-fill',
+          type: 'fill',
+          source: 'sonar-signals',
+          'source-layer': 'signals',
+          filter: [
+            '>=',
+            ['to-number', ['get', 'vegetation_signal'], -1],
+            0,
+          ],
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'vegetation_signal'], 0],
+              0, '#ecfccb',
+              0.15, '#d9f99d',
+              0.5, '#a3e635',
+              1, '#4ade80',
+              1.7, '#16a34a',
+              5, '#14532d',
+              10, '#052e16',
+            ],
+            'fill-opacity': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'vegetation_signal'], 0],
+              0, 0.18,
+              0.15, 0.34,
+              0.5, 0.56,
+              1.7, 0.76,
+              5, 0.92,
+            ],
+            'fill-antialias': false,
+            'fill-outline-color': 'rgba(255,255,255,0.1)',
+          },
+          layout: {
+            visibility:
+              showDepth && sonarMode === 'vegetation' ? 'visible' : 'none',
+          },
         })
 
         map.addLayer({
@@ -397,23 +538,103 @@ export default function KartaPage() {
               1, 0,
             ],
           },
-          layout: { visibility: showDepth ? 'visible' : 'none' },
+          layout: {
+            visibility:
+              showDepth && sonarHillshadeRef.current ? 'visible' : 'none',
+          },
         })
 
         map.addLayer({
-          id: 'sonar-contours',
+          id: 'sonar-contours-minor',
           type: 'line',
           source: 'sonar-depth',
           'source-layer': 'contours',
+          filter: [
+            '!=',
+            ['%', ['round', ['to-number', ['get', 'depth'], 0]], 5],
+            0,
+          ],
           paint: {
-            'line-color': 'rgba(15,23,42,0.66)',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.3, 16, 1.25],
-            'line-opacity': 0.68,
+            'line-color': 'rgba(15,23,42,0.58)',
+            'line-width': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              8, 0.25,
+              13, 0.65,
+              17, 1.15,
+            ],
+            'line-opacity': 0.58,
           },
           layout: {
-            visibility: showDepth ? 'visible' : 'none',
+            visibility:
+              showDepth && sonarContoursRef.current ? 'visible' : 'none',
             'line-cap': 'round',
             'line-join': 'round',
+          },
+        })
+
+        map.addLayer({
+          id: 'sonar-contours-major',
+          type: 'line',
+          source: 'sonar-depth',
+          'source-layer': 'contours',
+          filter: [
+            '==',
+            ['%', ['round', ['to-number', ['get', 'depth'], 0]], 5],
+            0,
+          ],
+          paint: {
+            'line-color': 'rgba(2,6,23,0.82)',
+            'line-width': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              8, 0.55,
+              13, 1.15,
+              17, 2,
+            ],
+            'line-opacity': 0.86,
+          },
+          layout: {
+            visibility:
+              showDepth && sonarContoursRef.current ? 'visible' : 'none',
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+
+        map.addLayer({
+          id: 'sonar-contour-labels',
+          type: 'symbol',
+          source: 'sonar-depth',
+          'source-layer': 'contours',
+          minzoom: 12,
+          layout: {
+            visibility:
+              showDepth && sonarContoursRef.current ? 'visible' : 'none',
+            'symbol-placement': 'line',
+            'symbol-spacing': 260,
+            'text-field': [
+              'concat',
+              ['to-string', ['round', ['to-number', ['get', 'depth'], 0]]],
+              ' m',
+            ],
+            'text-size': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              12, 9,
+              16, 11,
+            ],
+            'text-max-angle': 35,
+            'text-padding': 3,
+          },
+          paint: {
+            'text-color': '#0f172a',
+            'text-halo-color': 'rgba(255,255,255,0.92)',
+            'text-halo-width': 1.5,
+            'text-halo-blur': 0.5,
           },
         })
 
@@ -443,6 +664,7 @@ export default function KartaPage() {
           },
           layout: { visibility: showDepth ? 'visible' : 'none' },
         })
+        syncSonarLayerVisibility(map)
 
         // Own catches source
         map.addSource('catches', {
@@ -645,7 +867,7 @@ export default function KartaPage() {
           new mapboxgl.Popup({ offset: 15 }).setLngLat(coords).setHTML(html).addTo(map)
         })
 
-        map.on('click', 'sonar-depth-fill', async (e) => {
+        const inspectSonarPoint = async (e: mapboxgl.MapLayerMouseEvent) => {
           if (!depthMapRef.current) return
           const { lng, lat } = e.lngLat
           const popup = new mapboxgl.Popup({ offset: 12 })
@@ -673,6 +895,19 @@ export default function KartaPage() {
               info.avgWeightKg != null ? row('Medelvikt', `${info.avgWeightKg.toFixed(1)} kg`) : '',
               info.maxWeightKg != null ? row('Största fisk', `${info.maxWeightKg.toFixed(1)} kg`) : '',
             ].join('')
+            const selectedSignalRow =
+              sonarLayerModeRef.current === 'hardness' &&
+              info.vendorChannelA != null
+                ? row('Bottenrespons β', info.vendorChannelA.toFixed(1))
+                : sonarLayerModeRef.current === 'vegetation' &&
+                    info.vendorChannelB != null
+                  ? row('Vegetationssignal β', info.vendorChannelB.toFixed(1))
+                  : ''
+            const betaNote =
+              sonarLayerModeRef.current === 'hardness' ||
+              sonarLayerModeRef.current === 'vegetation'
+                ? '<div style="margin-top:8px;color:#64748b;font-size:11px;line-height:1.35">Relativ Humminbird-signal. Högre värde betyder starkare respons; exakt skala kalibreras mot kända platser.</div>'
+                : ''
 
             popup.setHTML(`
               <div style="min-width:210px;padding:8px;font-family:system-ui;font-size:13px">
@@ -680,20 +915,35 @@ export default function KartaPage() {
                 ${row('Djup', info.depthM != null ? `${info.depthM.toFixed(1)} m` : '–')}
                 ${row('Botten', escapeHtml(info.bottomClassification || 'Ej klassificerad'))}
                 ${row('Lutning', info.slopeDeg != null ? `${Math.round(info.slopeDeg)}°` : '–')}
+                ${selectedSignalRow}
                 ${row('Fångster här', String(info.catchCount ?? 0))}
                 ${optionalRows}
-                ${info.bottomHardness == null && info.vendorChannelA != null
-                  ? '<div style="margin-top:8px;color:#94a3b8;font-size:11px">Humminbirds råa bottenkanal sparas men visas inte som hårdhet förrän kanalens skala är verifierad.</div>'
-                  : ''}
+                ${betaNote}
               </div>
             `)
           } catch {
             popup.setHTML('<div style="padding:8px;font-family:system-ui">Kunde inte läsa punktinformationen.</div>')
           }
-        })
+        }
+
+        for (const layerId of [
+          'sonar-depth-fill',
+          'sonar-hardness-fill',
+          'sonar-vegetation-fill',
+        ]) {
+          map.on('click', layerId, inspectSonarPoint)
+        }
 
         // Cursors
-        const pointerLayers = ['sonar-depth-fill', 'clusters', 'unclustered-point', 'friend-clusters', 'friend-unclustered-point']
+        const pointerLayers = [
+          'sonar-depth-fill',
+          'sonar-hardness-fill',
+          'sonar-vegetation-fill',
+          'clusters',
+          'unclustered-point',
+          'friend-clusters',
+          'friend-unclustered-point',
+        ]
         pointerLayers.forEach((layer) => {
           map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
           map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = '' })
@@ -723,7 +973,7 @@ export default function KartaPage() {
       initializedMap?.remove()
       if (mapRef.current === initializedMap) mapRef.current = null
     }
-  }, [catches, friendCatches, loading])
+  }, [catches, friendCatches, loading, syncSonarLayerVisibility])
 
   useEffect(() => {
     const map = mapRef.current
@@ -796,27 +1046,34 @@ export default function KartaPage() {
     const next = !depthMap
     setDepthMap(next)
     depthMapRef.current = next
-
-    const visibility = next ? 'visible' : 'none'
-    for (const layer of [
-      'sonar-depth-fill',
-      'sonar-hillshade',
-      'sonar-contours',
-      'sonar-waypoints',
-    ]) {
-      if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', visibility)
-    }
-    if (map.getLayer('sonar-tracks')) {
-      map.setLayoutProperty(
-        'sonar-tracks',
-        'visibility',
-        next && sonarTracksRef.current ? 'visible' : 'none'
-      )
-    }
+    syncSonarLayerVisibility(map)
 
     if (next) {
       fitLargestSonarSurvey(map, surveys)
     }
+  }
+
+  function selectSonarLayer(mode: SonarLayerMode) {
+    setSonarLayerMode(mode)
+    sonarLayerModeRef.current = mode
+    const map = mapRef.current
+    if (map) syncSonarLayerVisibility(map)
+  }
+
+  function toggleSonarContours() {
+    const next = !showSonarContours
+    setShowSonarContours(next)
+    sonarContoursRef.current = next
+    const map = mapRef.current
+    if (map) syncSonarLayerVisibility(map)
+  }
+
+  function toggleSonarHillshade() {
+    const next = !showSonarHillshade
+    setShowSonarHillshade(next)
+    sonarHillshadeRef.current = next
+    const map = mapRef.current
+    if (map) syncSonarLayerVisibility(map)
   }
 
   function toggleSonarTracks() {
@@ -824,13 +1081,7 @@ export default function KartaPage() {
     setShowSonarTracks(next)
     sonarTracksRef.current = next
     const map = mapRef.current
-    if (map?.getLayer('sonar-tracks')) {
-      map.setLayoutProperty(
-        'sonar-tracks',
-        'visibility',
-        depthMapRef.current && next ? 'visible' : 'none'
-      )
-    }
+    if (map) syncSonarLayerVisibility(map)
   }
 
   function focusOwnCatches() {
@@ -931,37 +1182,136 @@ export default function KartaPage() {
       </div>
 
       {depthMap && surveys.length > 0 && (
-        <div className="absolute left-4 top-24 z-10 w-48 rounded-xl border border-slate-200/80 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-          <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-            <span>Djup</span>
-            <span>meter</span>
+        <div className="absolute left-4 top-24 z-10 w-64 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <div className="text-xs font-semibold text-slate-900 dark:text-white">
+                Egen sjökarta
+              </div>
+              <div className="text-[9px] text-slate-500 dark:text-slate-400">
+                Humminbird AutoChart
+              </div>
+            </div>
+            <span className="rounded-full bg-cyan-50 px-2 py-1 text-[9px] font-semibold text-cyan-800 dark:bg-cyan-950 dark:text-cyan-200">
+              {surveys.length} mätningar
+            </span>
           </div>
+
           <div
-            className="h-3 rounded-full"
-            style={{
-              background:
-                'linear-gradient(90deg, #ef4444 0%, #f97316 8%, #facc15 18%, #84cc16 30%, #22c55e 42%, #14b8a6 56%, #38bdf8 70%, #2563eb 84%, #1e3a8a 100%)',
-            }}
-          />
-          <div className="mt-1 flex justify-between text-[9px] text-slate-500 dark:text-slate-400">
-            <span>0</span>
-            <span>2</span>
-            <span>5</span>
-            <span>10</span>
-            <span>20+</span>
+            role="tablist"
+            aria-label="Sjökartslager"
+            className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 dark:bg-slate-800"
+          >
+            {([
+              ['depth', 'Djup'],
+              ['hardness', 'Hårdhet β'],
+              ['vegetation', 'Vegetation β'],
+            ] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={sonarLayerMode === mode}
+                onClick={() => selectSonarLayer(mode)}
+                className={`rounded-lg px-1.5 py-1.5 text-[10px] font-semibold transition ${
+                  sonarLayerMode === mode
+                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
+                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
-          <div className="mt-1 text-[9px] text-slate-500 dark:text-slate-400">
-            Varmt = grunt · blått = djupt
-          </div>
-          <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-slate-200 pt-2 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
-            <input
-              type="checkbox"
-              checked={showSonarTracks}
-              onChange={toggleSonarTracks}
-              className="h-3.5 w-3.5 accent-amber-500"
+
+          <div className="mt-3">
+            <div className="mb-1 flex items-center justify-between text-[9px] font-medium text-slate-600 dark:text-slate-300">
+              <span>
+                {sonarLayerMode === 'depth'
+                  ? 'Djup'
+                  : sonarLayerMode === 'hardness'
+                    ? 'Relativ bottenrespons'
+                    : 'Relativ vegetationssignal'}
+              </span>
+              <span>
+                {sonarLayerMode === 'depth' ? 'meter' : 'beta'}
+              </span>
+            </div>
+            <div
+              className="h-3 rounded-full ring-1 ring-black/5"
+              style={{
+                background:
+                  sonarLayerMode === 'depth'
+                    ? 'linear-gradient(90deg, #ef4444 0%, #f97316 8%, #facc15 18%, #84cc16 30%, #22c55e 42%, #14b8a6 56%, #38bdf8 70%, #2563eb 84%, #1e3a8a 100%)'
+                    : sonarLayerMode === 'hardness'
+                      ? 'linear-gradient(90deg, #f8fafc 0%, #d6d3d1 18%, #fde68a 35%, #fbbf24 50%, #f97316 68%, #7c2d12 86%, #1c1917 100%)'
+                      : 'linear-gradient(90deg, #ecfccb 0%, #d9f99d 18%, #a3e635 38%, #4ade80 56%, #16a34a 76%, #14532d 92%, #052e16 100%)',
+              }}
             />
-            Visa orange körspår
-          </label>
+            <div className="mt-1 flex justify-between text-[9px] text-slate-500 dark:text-slate-400">
+              {sonarLayerMode === 'depth' ? (
+                <>
+                  <span>0</span>
+                  <span>2</span>
+                  <span>5</span>
+                  <span>10</span>
+                  <span>20+</span>
+                </>
+              ) : (
+                <>
+                  <span>Låg</span>
+                  <span>Medel</span>
+                  <span>Hög</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {sonarLayerMode !== 'depth' && (
+            <p className="mt-2 text-[9px] leading-3.5 text-slate-500 dark:text-slate-400">
+              Relativ signal från ACU-filerna. Använd mönstret för att hitta
+              övergångar; exakt Humminbird-skala kalibreras vidare.
+            </p>
+          )}
+
+          <div className="mt-3 grid grid-cols-3 gap-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+            <button
+              type="button"
+              aria-pressed={showSonarContours}
+              onClick={toggleSonarContours}
+              className={`rounded-lg px-1.5 py-1.5 text-[9px] font-semibold transition ${
+                showSonarContours
+                  ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              }`}
+            >
+              Kurvor
+            </button>
+            <button
+              type="button"
+              aria-pressed={showSonarHillshade}
+              onClick={toggleSonarHillshade}
+              className={`rounded-lg px-1.5 py-1.5 text-[9px] font-semibold transition ${
+                showSonarHillshade
+                  ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900'
+                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              }`}
+            >
+              Terräng
+            </button>
+            <button
+              type="button"
+              aria-pressed={showSonarTracks}
+              onClick={toggleSonarTracks}
+              className={`rounded-lg px-1.5 py-1.5 text-[9px] font-semibold transition ${
+                showSonarTracks
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+              }`}
+            >
+              Körspår
+            </button>
+          </div>
         </div>
       )}
 
