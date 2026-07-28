@@ -34,7 +34,9 @@ export async function POST(_request: Request, props: { params: Promise<{ jobId: 
       { status: 404 }
     )
   }
-  if (job.workflow_run_id) {
+  const isResumingFailedJob = job.status === 'failed'
+
+  if (job.workflow_run_id && !isResumingFailedJob) {
     if (job.workflow_run_id.startsWith('starting:')) {
       return NextResponse.json(
         { error: 'Importjobbet håller redan på att startas' },
@@ -47,11 +49,7 @@ export async function POST(_request: Request, props: { params: Promise<{ jobId: 
       status: job.status,
     })
   }
-  if (
-    ['completed', 'completed_with_errors', 'failed', 'cancelled'].includes(
-      job.status
-    )
-  ) {
+  if (['completed', 'completed_with_errors', 'cancelled'].includes(job.status)) {
     return NextResponse.json(
       { error: 'Importjobbet kan inte startas i nuvarande status' },
       { status: 409 }
@@ -79,16 +77,24 @@ export async function POST(_request: Request, props: { params: Promise<{ jobId: 
   }
 
   const reservation = `starting:${crypto.randomUUID()}`
-  const { data: reservedJob, error: queueError } = await admin
+  let reservationQuery = admin
     .from('sonar_import_jobs')
     .update({
       status: 'queued',
       current_stage: 'Väntar på bakgrundsjobb',
       workflow_run_id: reservation,
+      error_summary: null,
+      completed_at: null,
     })
     .eq('id', params.jobId)
     .eq('user_id', user.id)
-    .is('workflow_run_id', null)
+    .eq('status', job.status)
+
+  reservationQuery = job.workflow_run_id
+    ? reservationQuery.eq('workflow_run_id', job.workflow_run_id)
+    : reservationQuery.is('workflow_run_id', null)
+
+  const { data: reservedJob, error: queueError } = await reservationQuery
     .select('id')
     .maybeSingle()
 

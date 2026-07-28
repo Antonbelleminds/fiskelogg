@@ -121,6 +121,7 @@ export default function SonarImportClient() {
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState(0)
   const [deviceTimezone, setDeviceTimezone] = useState('Europe/Stockholm')
+  const [resumingJobId, setResumingJobId] = useState<string | null>(null)
 
   useEffect(() => {
     setDeviceTimezone(
@@ -282,6 +283,28 @@ export default function SonarImportClient() {
       setStage('error')
       setMessage(error instanceof Error ? error.message : 'Importen misslyckades.')
       await loadJobs()
+    }
+  }
+
+  async function resumeImport(jobId: string) {
+    setResumingJobId(jobId)
+    setMessage('Återupptar importen från senast sparade block…')
+    try {
+      const response = await fetch(`/api/sonar/imports/${jobId}/start`, {
+        method: 'POST',
+      })
+      const body = await response.json()
+      if (!response.ok) {
+        throw new Error(body.error || 'Kunde inte återuppta importen.')
+      }
+      setMessage('Importen har återupptagits i bakgrunden.')
+      await loadJobs()
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : 'Kunde inte återuppta importen.'
+      )
+    } finally {
+      setResumingJobId(null)
     }
   }
 
@@ -500,15 +523,30 @@ export default function SonarImportClient() {
                         {job.files_total} filer
                       </div>
                     </div>
-                    {['completed', 'completed_with_errors'].includes(job.status) &&
-                      job.points_imported > 0 && (
+                    {job.status === 'failed' &&
+                    job.sonar_import_files.some((file) =>
+                      ['uploaded', 'parsing'].includes(file.status)
+                    ) ? (
+                      <button
+                        type="button"
+                        onClick={() => resumeImport(job.id)}
+                        disabled={resumingJobId !== null}
+                        className="rounded-lg bg-primary-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        {resumingJobId === job.id
+                          ? 'Återupptar…'
+                          : 'Återuppta'}
+                      </button>
+                    ) : ['completed', 'completed_with_errors'].includes(
+                        job.status
+                      ) && job.points_imported > 0 ? (
                       <Link
                         href="/karta?djupkarta=1"
                         className="rounded-lg bg-primary-700 px-3 py-1.5 text-xs font-medium text-white"
                       >
                         Visa karta
                       </Link>
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">

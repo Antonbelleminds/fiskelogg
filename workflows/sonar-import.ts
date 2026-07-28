@@ -1,6 +1,7 @@
 import { FatalError } from 'workflow'
 import { createAdminClient } from '@/lib/supabase/server'
 import { detectSonarImporter } from '@/lib/sonar/importers/registry'
+import { boundsPolygonWkt } from '@/lib/sonar/geometry'
 import type {
   SonarFileDescriptor,
   SonarParsedHeader,
@@ -156,11 +157,6 @@ async function downloadRange(
   )
 }
 
-function boundsPolygonWkt(header: SonarParsedHeader) {
-  const { west, south, east, north } = header.bounds
-  return `SRID=4326;POLYGON((${west} ${south},${east} ${south},${east} ${north},${west} ${north},${west} ${south}))`
-}
-
 async function initializePointFile(file: ImportFileRow) {
   if (!file.storage_path) throw new FatalError('Filens lagringssökväg saknas')
 
@@ -237,7 +233,7 @@ async function initializePointFile(file: ImportFileRow) {
       source_format: header.format,
       parser_plugin: detected.plugin.id,
       parser_version: detected.plugin.version,
-      bounds: boundsPolygonWkt(header),
+      bounds: boundsPolygonWkt(header.bounds),
       metadata: {
         header: header.raw,
         timeInterpretation: 'device-local-wall-clock',
@@ -571,10 +567,21 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
       completedWithErrors: result.hasErrors,
     }
   } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' &&
+            error !== null &&
+            'message' in error &&
+            typeof error.message === 'string'
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : 'Okänt workflow-fel'
     await failJob(
       jobId,
       userId,
-      error instanceof Error ? error.message : 'Okänt workflow-fel'
+      errorMessage
     )
     throw error
   }
