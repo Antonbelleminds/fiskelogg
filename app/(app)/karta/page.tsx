@@ -122,6 +122,7 @@ export default function KartaPage() {
   const [satellite, setSatellite] = useState(false)
   const [depthMap, setDepthMap] = useState(false)
   const [surveys, setSurveys] = useState<SonarSurvey[]>([])
+  const [mapGeneration, setMapGeneration] = useState(0)
   const [mapPin, setMapPin] = useState('')
   const [mapPinError, setMapPinError] = useState('')
 
@@ -691,6 +692,7 @@ export default function KartaPage() {
           features.forEach((f) => bounds.extend(f.geometry.coordinates as [number, number]))
           map.fitBounds(bounds, { padding: 50, maxZoom: 12 })
         }
+        setMapGeneration((generation) => generation + 1)
       })
 
     }
@@ -707,7 +709,7 @@ export default function KartaPage() {
     const map = mapRef.current
     if (!map || !depthMap || surveys.length === 0) return
     fitLargestSonarSurvey(map, surveys)
-  }, [depthMap, surveys])
+  }, [depthMap, surveys, mapGeneration])
 
   function toggleHeatmap() {
     const map = mapRef.current
