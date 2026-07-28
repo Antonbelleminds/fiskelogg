@@ -159,7 +159,9 @@ export default function SonarImportClient() {
     try {
       const prepared = await prepareSonarSelection(files)
       if (prepared.files.length === 0) {
-        throw new Error('Inga kända ekolodsfiler hittades i urvalet.')
+        throw new Error(
+          'Inga stödda sonarloggar hittades. På Humminbird-kort väljer du hela SD-kortet eller mappen ACDATA med .ACU-filerna.'
+        )
       }
       setSelection(prepared)
       setMessage(
@@ -488,14 +490,18 @@ export default function SonarImportClient() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold">
-                        {statusLabel(job.status)}
+                        {job.status === 'completed_with_errors' &&
+                        job.points_imported === 0
+                          ? 'Ingen djupdata importerad'
+                          : statusLabel(job.status)}
                       </div>
                       <div className="mt-0.5 text-xs text-slate-500">
                         {new Date(job.created_at).toLocaleString('sv-SE')} ·{' '}
                         {job.files_total} filer
                       </div>
                     </div>
-                    {['completed', 'completed_with_errors'].includes(job.status) && (
+                    {['completed', 'completed_with_errors'].includes(job.status) &&
+                      job.points_imported > 0 && (
                       <Link
                         href="/karta?djupkarta=1"
                         className="rounded-lg bg-primary-700 px-3 py-1.5 text-xs font-medium text-white"
@@ -523,7 +529,9 @@ export default function SonarImportClient() {
                   {(job.error_summary || job.error_count > 0) && (
                     <div className="mt-3 rounded-lg bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
                       {job.error_summary ||
-                        `${job.error_count} fil(er) kunde inte läsas. Övrig data sparades.`}
+                        (job.points_imported === 0
+                          ? 'Inga stödda sonarloggar hittades. För Humminbird: välj hela SD-kortet eller ACDATA-mappen med .ACU-filer.'
+                          : `${job.error_count} fil(er) kunde inte läsas. Övrig data sparades.`)}
                     </div>
                   )}
                 </article>

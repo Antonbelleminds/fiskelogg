@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import './globals.css'
 
 export const metadata: Metadata = {

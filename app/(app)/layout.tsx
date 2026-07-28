@@ -29,6 +29,7 @@ function PinGate({ children }: { children: React.ReactNode }) {
   const [pinError, setPinError] = useState('')
   const [attempts, setAttempts] = useState(0)
   const [loaded, setLoaded] = useState(false)
+  const [pinPromptDismissed, setPinPromptDismissed] = useState(false)
 
   // Load pin_hash/pin_salt from profile on mount (cached to avoid blocking)
   useEffect(() => {
@@ -72,7 +73,8 @@ function PinGate({ children }: { children: React.ReactNode }) {
   }
 
   // Show PIN overlay if pin is set but not unlocked
-  const showOverlay = loaded && hasPinSet && !isUnlocked
+  const showOverlay =
+    loaded && hasPinSet && !isUnlocked && !pinPromptDismissed
 
   return (
     <div className="min-h-dvh flex flex-col pb-20">
@@ -113,7 +115,7 @@ function PinGate({ children }: { children: React.ReactNode }) {
               Du kan använda appen utan pin — platsdata visas då inte.
             </p>
             <button
-              onClick={() => setProfilePin(null, null)}
+              onClick={() => setPinPromptDismissed(true)}
               className="text-xs text-slate-400 underline"
             >
               Fortsätt utan att låsa upp

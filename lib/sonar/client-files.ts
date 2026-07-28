@@ -26,6 +26,19 @@ export interface PreparedSonarSelection {
   ignoredFiles: number
 }
 
+/**
+ * Humminbird's LkMaster directory contains AutoChart basemap assets, not
+ * recordings from the sonar. They can be very large and use the otherwise
+ * ambiguous .bin extension, so exclude them by path before format detection.
+ */
+export function isKnownSdSystemFile(path: string) {
+  const normalized = path.replaceAll('\\', '/').toLowerCase()
+  return (
+    normalized.split('/').includes('lkmaster') &&
+    extensionOf(normalized) === '.bin'
+  )
+}
+
 async function extractSonarZip(zipFile: File) {
   if (zipFile.size > MAX_ZIP_SIZE) {
     throw new Error(
@@ -55,6 +68,7 @@ async function extractSonarZip(zipFile: File) {
     const unzipper = new Unzip((entry) => {
       if (
         entry.name.endsWith('/') ||
+        isKnownSdSystemFile(entry.name) ||
         !acceptedSonarExtensions.has(extensionOf(entry.name))
       ) {
         return
@@ -142,6 +156,12 @@ export async function prepareSonarSelection(inputFiles: File[]) {
       continue
     }
 
+    const relativePath = file.webkitRelativePath || file.name
+    if (isKnownSdSystemFile(relativePath)) {
+      ignoredFiles += 1
+      continue
+    }
+
     if (!acceptedSonarExtensions.has(extensionOf(file.name))) {
       ignoredFiles += 1
       continue
@@ -149,7 +169,7 @@ export async function prepareSonarSelection(inputFiles: File[]) {
 
     selected.push({
       file,
-      relativePath: file.webkitRelativePath || file.name,
+      relativePath,
     })
   }
 

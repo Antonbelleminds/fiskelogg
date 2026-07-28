@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { getCache, setCache } from '@/lib/cache'
 import { useDecryptCatches } from '@/lib/useDecryptCatches'
+import { usePin } from '@/contexts/PinContext'
 
 interface MapCatch {
   id: string
@@ -70,6 +71,7 @@ function escapeHtml(value: unknown) {
 }
 
 export default function KartaPage() {
+  const { hasPinSet, isUnlocked, unlock } = usePin()
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [catches, setCatches] = useState<MapCatch[]>([])
@@ -82,6 +84,8 @@ export default function KartaPage() {
   const [satellite, setSatellite] = useState(false)
   const [depthMap, setDepthMap] = useState(false)
   const [surveys, setSurveys] = useState<SonarSurvey[]>([])
+  const [mapPin, setMapPin] = useState('')
+  const [mapPinError, setMapPinError] = useState('')
 
   // Refs to track current visibility state (needed after style reload)
   const heatmapRef = useRef(false)
@@ -219,12 +223,6 @@ export default function KartaPage() {
     async function initMap() {
       const mapboxgl = (await import('mapbox-gl')).default
       if (disposed || !mapContainer.current) return
-      if (!document.querySelector('link[href*="mapbox-gl"]')) {
-        const link = document.createElement('link')
-        link.rel = 'stylesheet'
-        link.href = 'https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css'
-        document.head.appendChild(link)
-      }
 
       mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
 
@@ -692,10 +690,17 @@ export default function KartaPage() {
     const next = !heatmap
     setHeatmap(next)
     heatmapRef.current = next
-    map.setLayoutProperty('catches-heat', 'visibility', next ? 'visible' : 'none')
-    map.setLayoutProperty('clusters', 'visibility', next ? 'none' : 'visible')
-    map.setLayoutProperty('cluster-count', 'visibility', next ? 'none' : 'visible')
-    map.setLayoutProperty('unclustered-point', 'visibility', next ? 'none' : 'visible')
+    const visibilityByLayer: Record<string, 'visible' | 'none'> = {
+      'catches-heat': next ? 'visible' : 'none',
+      clusters: next ? 'none' : 'visible',
+      'cluster-count': next ? 'none' : 'visible',
+      'unclustered-point': next ? 'none' : 'visible',
+    }
+    Object.entries(visibilityByLayer).forEach(([layer, visibility]) => {
+      if (map.getLayer(layer)) {
+        map.setLayoutProperty(layer, 'visibility', visibility)
+      }
+    })
   }
 
   function toggleMapFilter() {
@@ -705,9 +710,15 @@ export default function KartaPage() {
     setMapFilter(next)
     mapFilterRef.current = next
     const showFriends = next === 'all' ? 'visible' : 'none'
-    map.setLayoutProperty('friend-clusters', 'visibility', showFriends)
-    map.setLayoutProperty('friend-cluster-count', 'visibility', showFriends)
-    map.setLayoutProperty('friend-unclustered-point', 'visibility', showFriends)
+    for (const layer of [
+      'friend-clusters',
+      'friend-cluster-count',
+      'friend-unclustered-point',
+    ]) {
+      if (map.getLayer(layer)) {
+        map.setLayoutProperty(layer, 'visibility', showFriends)
+      }
+    }
   }
 
   function toggleStyle() {
@@ -766,6 +777,23 @@ export default function KartaPage() {
 
   const totalWithCoords = catches.filter((c) => c.exif_lat).length
   const shownCount = filteredIds !== null ? filteredIds.length : totalWithCoords
+  const lockedCatchCount = catches.filter(
+    (caught) =>
+      caught.location_encrypted &&
+      caught.encrypted_location &&
+      caught.encryption_iv &&
+      (caught.exif_lat == null || caught.exif_lng == null)
+  ).length
+
+  async function handleMapPinSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    setMapPinError('')
+    const unlocked = await unlock(mapPin)
+    if (!unlocked) {
+      setMapPin('')
+      setMapPinError('Fel fiskepin. Försök igen.')
+    }
+  }
 
   return (
     <div className="relative h-[calc(100dvh-8.75rem)]">
@@ -881,7 +909,51 @@ export default function KartaPage() {
         </div>
       )}
 
-      {catches.filter((c) => c.exif_lat).length === 0 && surveys.length === 0 && !loading && (
+      {lockedCatchCount > 0 && hasPinSet && !isUnlocked && !loading && (
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-lg pointer-events-auto dark:bg-slate-800">
+            <div className="mb-2 flex justify-center text-slate-400">
+              <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 0h10.5A2.25 2.25 0 0 1 19.5 12.75v6A2.25 2.25 0 0 1 17.25 21H6.75A2.25 2.25 0 0 1 4.5 18.75v-6a2.25 2.25 0 0 1 2.25-2.25Z" />
+              </svg>
+            </div>
+            <h2 className="font-medium">Fångstplatserna är låsta</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {lockedCatchCount} fångster har PIN-krypterade positioner. Lås upp dem för att visa kartnålarna.
+            </p>
+            <form onSubmit={handleMapPinSubmit} className="mt-4 space-y-2">
+              <input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={mapPin}
+                onChange={(event) =>
+                  setMapPin(event.target.value.replace(/\D/g, ''))
+                }
+                placeholder="Fiskepin"
+                aria-label="Fiskepin"
+                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-center text-lg tracking-[0.35em] focus:outline-none focus:ring-2 focus:ring-primary-700 dark:border-slate-700 dark:bg-slate-900"
+              />
+              {mapPinError && (
+                <p className="text-sm text-red-500">{mapPinError}</p>
+              )}
+              <button
+                type="submit"
+                disabled={mapPin.length < 4}
+                className="w-full rounded-xl bg-primary-700 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-40"
+              >
+                Lås upp fångster
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {totalWithCoords === 0 &&
+        lockedCatchCount === 0 &&
+        surveys.length === 0 &&
+        !loading && (
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 text-center shadow-lg pointer-events-auto">
             <div className="mb-2 flex justify-center text-slate-300">
