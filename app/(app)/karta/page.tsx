@@ -351,16 +351,20 @@ export default function KartaPage() {
             'fill-color': [
               'interpolate',
               ['linear'],
-              ['coalesce', ['get', 'depth'], 0],
-              0, '#dff6ff',
-              2, '#75d5f0',
-              5, '#2b9fbd',
-              10, '#176b87',
-              20, '#12324a',
-              50, '#071a2b',
+              ['to-number', ['get', 'depth'], 0],
+              0, '#ef4444',
+              1, '#f97316',
+              2, '#facc15',
+              3.5, '#84cc16',
+              5, '#22c55e',
+              7.5, '#14b8a6',
+              10, '#38bdf8',
+              15, '#2563eb',
+              25, '#1e3a8a',
+              40, '#0f172a',
             ],
-            'fill-opacity': 0.72,
-            'fill-outline-color': 'rgba(255,255,255,0.08)',
+            'fill-opacity': 0.9,
+            'fill-outline-color': 'rgba(0,0,0,0)',
           },
           layout: { visibility: showDepth ? 'visible' : 'none' },
         })
@@ -390,9 +394,9 @@ export default function KartaPage() {
           source: 'sonar-depth',
           'source-layer': 'contours',
           paint: {
-            'line-color': 'rgba(255,255,255,0.8)',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.4, 16, 1.5],
-            'line-opacity': 0.8,
+            'line-color': 'rgba(15,23,42,0.72)',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.3, 16, 1.25],
+            'line-opacity': 0.75,
           },
           layout: { visibility: showDepth ? 'visible' : 'none' },
         })
@@ -403,9 +407,9 @@ export default function KartaPage() {
           source: 'sonar-depth',
           'source-layer': 'tracks',
           paint: {
-            'line-color': '#fbbf24',
-            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1, 16, 2.5],
-            'line-opacity': 0.8,
+            'line-color': '#f59e0b',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.7, 16, 1.8],
+            'line-opacity': 0.62,
           },
           layout: { visibility: showDepth ? 'visible' : 'none' },
         })
@@ -864,6 +868,32 @@ export default function KartaPage() {
           </div>
         )}
       </div>
+
+      {depthMap && surveys.length > 0 && (
+        <div className="pointer-events-none absolute left-4 top-24 z-10 w-48 rounded-xl border border-slate-200/80 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+          <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+            <span>Djup</span>
+            <span>meter</span>
+          </div>
+          <div
+            className="h-3 rounded-full"
+            style={{
+              background:
+                'linear-gradient(90deg, #ef4444 0%, #f97316 8%, #facc15 18%, #84cc16 30%, #22c55e 42%, #14b8a6 56%, #38bdf8 70%, #2563eb 84%, #1e3a8a 100%)',
+            }}
+          />
+          <div className="mt-1 flex justify-between text-[9px] text-slate-500 dark:text-slate-400">
+            <span>0</span>
+            <span>2</span>
+            <span>5</span>
+            <span>10</span>
+            <span>20+</span>
+          </div>
+          <div className="mt-1 text-[9px] text-slate-500 dark:text-slate-400">
+            Varmt = grunt · blått = djupt
+          </div>
+        </div>
+      )}
 
       {/* Bottom controls */}
       <div className="absolute bottom-6 left-4 right-4 flex flex-wrap gap-2 z-10">
