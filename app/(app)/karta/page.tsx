@@ -121,6 +121,7 @@ export default function KartaPage() {
   const [mapFilter, setMapFilter] = useState<MapFilter>('mine')
   const [satellite, setSatellite] = useState(false)
   const [depthMap, setDepthMap] = useState(false)
+  const [showSonarTracks, setShowSonarTracks] = useState(false)
   const [surveys, setSurveys] = useState<SonarSurvey[]>([])
   const [mapGeneration, setMapGeneration] = useState(0)
   const [mapPin, setMapPin] = useState('')
@@ -129,6 +130,7 @@ export default function KartaPage() {
   // Refs to track current visibility state (needed after style reload)
   const heatmapRef = useRef(false)
   const depthMapRef = useRef(false)
+  const sonarTracksRef = useRef(false)
   const mapFilterRef = useRef<MapFilter>('mine')
   const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
   const friendFeaturesRef = useRef<GeoJSON.Feature[]>([])
@@ -170,7 +172,7 @@ export default function KartaPage() {
   }, [])
 
   // Decrypt encrypted catches when PIN is unlocked
-  useDecryptCatches(catches, setCatches)
+  const decryptStatus = useDecryptCatches(catches, setCatches)
 
   // Lazy-load friend catches only when "Alla" filter is selected
   useEffect(() => {
@@ -334,6 +336,7 @@ export default function KartaPage() {
         if (map.getSource('sonar-depth')) map.removeSource('sonar-depth')
 
         const showDepth = depthMapRef.current
+        const showTracks = showDepth && sonarTracksRef.current
 
         map.addSource('sonar-depth', {
           type: 'vector',
@@ -424,7 +427,7 @@ export default function KartaPage() {
             'line-width': ['interpolate', ['linear'], ['zoom'], 8, 0.7, 16, 1.8],
             'line-opacity': 0.62,
           },
-          layout: { visibility: showDepth ? 'visible' : 'none' },
+          layout: { visibility: showTracks ? 'visible' : 'none' },
         })
 
         map.addLayer({
@@ -725,8 +728,11 @@ export default function KartaPage() {
   useEffect(() => {
     const map = mapRef.current
     if (!map || !depthMap || surveys.length === 0) return
+    if (catches.some(caught => caught.exif_lat != null && caught.exif_lng != null)) {
+      return
+    }
     fitLargestSonarSurvey(map, surveys)
-  }, [depthMap, surveys, mapGeneration])
+  }, [depthMap, surveys, mapGeneration, catches])
 
   function toggleHeatmap() {
     const map = mapRef.current
@@ -796,10 +802,16 @@ export default function KartaPage() {
       'sonar-depth-fill',
       'sonar-hillshade',
       'sonar-contours',
-      'sonar-tracks',
       'sonar-waypoints',
     ]) {
       if (map.getLayer(layer)) map.setLayoutProperty(layer, 'visibility', visibility)
+    }
+    if (map.getLayer('sonar-tracks')) {
+      map.setLayoutProperty(
+        'sonar-tracks',
+        'visibility',
+        next && sonarTracksRef.current ? 'visible' : 'none'
+      )
     }
 
     if (next) {
@@ -807,7 +819,43 @@ export default function KartaPage() {
     }
   }
 
-  const totalWithCoords = catches.filter((c) => c.exif_lat).length
+  function toggleSonarTracks() {
+    const next = !showSonarTracks
+    setShowSonarTracks(next)
+    sonarTracksRef.current = next
+    const map = mapRef.current
+    if (map?.getLayer('sonar-tracks')) {
+      map.setLayoutProperty(
+        'sonar-tracks',
+        'visibility',
+        depthMapRef.current && next ? 'visible' : 'none'
+      )
+    }
+  }
+
+  function focusOwnCatches() {
+    const map = mapRef.current
+    if (!map || allFeaturesRef.current.length === 0) return
+    const coordinates = allFeaturesRef.current.flatMap(feature =>
+      feature.geometry.type === 'Point'
+        ? [feature.geometry.coordinates as [number, number]]
+        : []
+    )
+    if (coordinates.length === 0) return
+    const longitudes = coordinates.map(coordinate => coordinate[0])
+    const latitudes = coordinates.map(coordinate => coordinate[1])
+    map.fitBounds(
+      [
+        [Math.min(...longitudes), Math.min(...latitudes)],
+        [Math.max(...longitudes), Math.max(...latitudes)],
+      ],
+      { padding: 50, maxZoom: 12 }
+    )
+  }
+
+  const totalWithCoords = catches.filter(
+    caught => caught.exif_lat != null && caught.exif_lng != null
+  ).length
   const shownCount = filteredIds !== null ? filteredIds.length : totalWithCoords
   const lockedCatchCount = catches.filter(
     (caught) =>
@@ -883,7 +931,7 @@ export default function KartaPage() {
       </div>
 
       {depthMap && surveys.length > 0 && (
-        <div className="pointer-events-none absolute left-4 top-24 z-10 w-48 rounded-xl border border-slate-200/80 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
+        <div className="absolute left-4 top-24 z-10 w-48 rounded-xl border border-slate-200/80 bg-white/95 p-3 shadow-lg backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
           <div className="mb-2 flex items-center justify-between text-[11px] font-semibold text-slate-700 dark:text-slate-200">
             <span>Djup</span>
             <span>meter</span>
@@ -905,6 +953,21 @@ export default function KartaPage() {
           <div className="mt-1 text-[9px] text-slate-500 dark:text-slate-400">
             Varmt = grunt · blått = djupt
           </div>
+          <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-slate-200 pt-2 text-[11px] font-medium text-slate-700 dark:border-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={showSonarTracks}
+              onChange={toggleSonarTracks}
+              className="h-3.5 w-3.5 accent-amber-500"
+            />
+            Visa orange körspår
+          </label>
+        </div>
+      )}
+
+      {isUnlocked && decryptStatus.isDecrypting && (
+        <div className="absolute right-4 top-24 z-10 rounded-lg bg-white/95 px-3 py-2 text-xs font-medium text-slate-700 shadow-md dark:bg-slate-800/95 dark:text-slate-200">
+          Låser upp fångstplatser…
         </div>
       )}
 
@@ -951,6 +1014,14 @@ export default function KartaPage() {
         >
           {mapFilter === 'all' ? 'Alla' : 'Mina'}
         </button>
+        {totalWithCoords > 0 && (
+          <button
+            onClick={focusOwnCatches}
+            className="rounded-lg bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-md transition hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          >
+            Fångster ({totalWithCoords})
+          </button>
+        )}
       </div>
 
       {/* Legend when showing friends */}
@@ -1004,6 +1075,23 @@ export default function KartaPage() {
                 Lås upp fångster
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isUnlocked &&
+        !decryptStatus.isDecrypting &&
+        decryptStatus.failedCount > 0 &&
+        totalWithCoords === 0 &&
+        !loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center px-4 pointer-events-none">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-lg pointer-events-auto dark:bg-slate-800">
+            <h2 className="font-medium">Fångstplatserna kunde inte låsas upp</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              PIN-koden godkändes, men platserna är krypterade med en annan
+              nyckel. Ladda om sidan och ange samma Fiskepin som användes när
+              fångsterna krypterades.
+            </p>
           </div>
         </div>
       )}
