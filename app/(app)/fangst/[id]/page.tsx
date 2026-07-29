@@ -381,7 +381,9 @@ export default function CatchDetailPage() {
           {c.bottom_structure && <InfoBox label="Botten" value={c.bottom_structure} />}
         </div>
 
-        {sonarContext && <SonarContextCard context={sonarContext} />}
+        {sonarContext && (
+          <SonarContextCard context={sonarContext} catchId={c.id} />
+        )}
 
         {!sonarContext && c.sonar_enrichment && (
           <div className="rounded-xl bg-cyan-50 p-4 dark:bg-cyan-950/20">
@@ -530,7 +532,13 @@ const sonarLevelLabels: Record<SonarLevel, string> = {
   unknown: 'Saknas',
 }
 
-function SonarContextCard({ context }: { context: SonarLocationContext }) {
+function SonarContextCard({
+  context,
+  catchId,
+}: {
+  context: SonarLocationContext
+  catchId: string
+}) {
   const depthSpread =
     context.minDepthM != null && context.maxDepthM != null
       ? context.maxDepthM - context.minDepthM
@@ -675,7 +683,7 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
       <div className="mt-3 flex items-center justify-between border-t border-cyan-200/70 pt-3 text-[10px] text-cyan-700 dark:border-cyan-900 dark:text-cyan-300">
         <span>Ändrar inte fångstens manuella uppgifter</span>
         <Link
-          href="/karta?djupkarta=1"
+          href={`/karta?djupkarta=1&fangst=${encodeURIComponent(catchId)}`}
           className="font-semibold hover:text-cyan-950 dark:hover:text-white"
         >
           Visa kartan →

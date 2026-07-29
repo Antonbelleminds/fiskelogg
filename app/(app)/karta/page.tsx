@@ -144,6 +144,7 @@ export default function KartaPage() {
   const sonarTracksRef = useRef(false)
   const mapFilterRef = useRef<MapFilter>('mine')
   const shouldAutoFocusSonarRef = useRef(false)
+  const requestedCatchIdRef = useRef<string | null>(null)
   const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
   const friendFeaturesRef = useRef<GeoJSON.Feature[]>([])
 
@@ -172,10 +173,13 @@ export default function KartaPage() {
   }, [])
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get('djupkarta') === '1') {
+    const searchParams = new URLSearchParams(window.location.search)
+    requestedCatchIdRef.current = searchParams.get('fangst')
+
+    if (searchParams.get('djupkarta') === '1') {
       setDepthMap(true)
       depthMapRef.current = true
-      shouldAutoFocusSonarRef.current = true
+      shouldAutoFocusSonarRef.current = !requestedCatchIdRef.current
     }
 
     fetch('/api/sonar/surveys')
@@ -1054,8 +1058,22 @@ export default function KartaPage() {
         // Store addSourcesAndLayers on the map instance for style reloads
         ;(map as any)._addSourcesAndLayers = addSourcesAndLayers
 
-        // Zoom to fit all own catches
-        if (features.length > 0) {
+        const requestedCatch = requestedCatchIdRef.current
+          ? features.find(
+              (feature) =>
+                feature.properties?.id === requestedCatchIdRef.current
+            )
+          : null
+
+        if (requestedCatch) {
+          map.easeTo({
+            center: requestedCatch.geometry.coordinates as [number, number],
+            zoom: 16,
+            duration: 0,
+          })
+          requestedCatchIdRef.current = null
+        } else if (!requestedCatchIdRef.current && features.length > 0) {
+          // Normal map entry: zoom to fit all own catches.
           const bounds = new mapboxgl.LngLatBounds()
           features.forEach((f) => bounds.extend(f.geometry.coordinates as [number, number]))
           map.fitBounds(bounds, { padding: 50, maxZoom: 12 })
