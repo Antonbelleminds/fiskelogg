@@ -440,6 +440,57 @@ export function createCalculatedAnalysis(input: FishingAnalysisInput): FishingAi
   }
 }
 
+const UNSUPPORTED_OBSERVED_CLAIM =
+  /\bmest produktiv|\bproduktiva?\b|\bfångstaktivitet|\bfångstfrekvens|\betablerad(?:e)?\s+\w*\s*population|\bfiskens aktivitetsmönster/i
+
+function containsUnsupportedObservedClaim(value: string): boolean {
+  return UNSUPPORTED_OBSERVED_CLAIM.test(value)
+}
+
+function isSonarFinding(
+  finding: FishingAiResult['findings'][number]
+): boolean {
+  return /\bsonar|\bekolod|\bdjup|\blutning|\bbotten|\bhårdhet|\bvegetation/i
+    .test(`${finding.title} ${finding.insight} ${finding.evidence}`)
+}
+
+export function guardAiAnalysis(
+  result: FishingAiResult,
+  input: FishingAnalysisInput
+): FishingAiResult {
+  const fallback = createCalculatedAnalysis(input)
+  const safeFindings = result.findings.filter(
+    (finding) =>
+      !containsUnsupportedObservedClaim(
+        `${finding.title} ${finding.insight} ${finding.evidence}`
+      )
+  )
+
+  if (
+    input.sonar.pointCount > 0 &&
+    !safeFindings.some(isSonarFinding)
+  ) {
+    const sonarFallback = fallback.findings.find(isSonarFinding)
+    if (sonarFallback) {
+      if (safeFindings.length >= 4) safeFindings.pop()
+      safeFindings.push(sonarFallback)
+    }
+  }
+
+  return FishingAiResultSchema.parse({
+    ...result,
+    headline: containsUnsupportedObservedClaim(result.headline)
+      ? fallback.headline
+      : result.headline,
+    summary: containsUnsupportedObservedClaim(result.summary)
+      ? fallback.summary
+      : result.summary,
+    findings: safeFindings.length > 0
+      ? safeFindings.slice(0, 4)
+      : fallback.findings,
+  })
+}
+
 export function parseAiJson(text: string): FishingAiResult | null {
   const withoutFence = text
     .trim()

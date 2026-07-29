@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
   buildFishingAnalysisInput,
   createCalculatedAnalysis,
+  guardAiAnalysis,
   parseAiJson,
 } from '../../lib/ai/fishing-analysis'
 
@@ -112,4 +113,31 @@ test('parses fenced AI JSON and rejects an invalid contract', () => {
 
   assert.equal(valid?.headline, 'Test')
   assert.equal(parseAiJson('{"headline":"saknar resten"}'), null)
+})
+
+test('guards observed claims but keeps a valid future rate experiment', () => {
+  const input = buildFishingAnalysisInput([], sonar)
+  const guarded = guardAiAnalysis(
+    {
+      headline: 'AI-analys',
+      summary: 'En försiktig analys.',
+      findings: [{
+        title: 'Mest produktiva djupet',
+        insight: 'Detta djup har högst fångstfrekvens.',
+        evidence: '600 sonarmätningar.',
+        confidence: 'high',
+      }],
+      nextActions: [{
+        title: 'Mät fisketid',
+        action: 'Logga fisketimmar för att kunna beräkna fångstfrekvens.',
+        why: 'Då kan olika pass jämföras rättvist.',
+      }],
+      limitations: ['Fångstloggen saknar resultatlösa pass.'],
+    },
+    input
+  )
+
+  assert.doesNotMatch(JSON.stringify(guarded.findings), /produktiv|fångstfrekvens/i)
+  assert.ok(guarded.findings.some((finding) => /djup/i.test(finding.title)))
+  assert.match(guarded.nextActions[0].action, /fångstfrekvens/)
 })

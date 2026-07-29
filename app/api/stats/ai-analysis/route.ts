@@ -4,8 +4,10 @@ import { createAnthropicClient } from '@/lib/anthropic'
 import {
   buildFishingAnalysisInput,
   createCalculatedAnalysis,
+  guardAiAnalysis,
   parseAiJson,
   type CatchForAnalysis,
+  type FishingAnalysisInput,
   type FishingAiResult,
 } from '@/lib/ai/fishing-analysis'
 import {
@@ -17,7 +19,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 45
 
 const MODEL = 'claude-haiku-4-5'
-const ANALYSIS_VERSION = 'fishing-analysis-v4'
+const ANALYSIS_VERSION = 'fishing-analysis-v5'
 const PAGE_SIZE = 500
 const MAX_CATCHES = 2_000
 const MIN_FORCE_REFRESH_MS = 2 * 60 * 1000
@@ -113,7 +115,9 @@ Data:
 ${JSON.stringify(input)}`
 }
 
-async function generateAiAnalysis(input: unknown): Promise<FishingAiResult | null> {
+async function generateAiAnalysis(
+  input: FishingAnalysisInput
+): Promise<FishingAiResult | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
 
   const anthropic = createAnthropicClient()
@@ -146,16 +150,7 @@ async function generateAiAnalysis(input: unknown): Promise<FishingAiResult | nul
     return null
   }
 
-  const serialized = JSON.stringify(parsed)
-  const unsupportedClaim =
-    /\bmest produktiv|\bproduktiva?\b|\bfångstaktivitet|\bfångstfrekvens|\betablerad(?:e)?\s+\w*\s*population|\bfiskens aktivitetsmönster/i
-      .test(serialized)
-  if (unsupportedClaim) {
-    console.warn('AI fishing analysis contained an unsupported rate or population claim')
-    return null
-  }
-
-  return parsed
+  return guardAiAnalysis(parsed, input)
 }
 
 export async function POST(request: NextRequest) {
