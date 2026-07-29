@@ -665,7 +665,7 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
     await runDerivedRpc(jobId, userId, 'sonar_build_tracks')
     await updateJobStage(jobId, userId, 'deriving', 'Skapar djupkonturer')
     await runDerivedRpc(jobId, userId, 'sonar_build_contours', {
-      p_interval_m: 1,
+      p_interval_m: 0.5,
     })
     await updateJobStage(jobId, userId, 'matching', 'Matchar fångster')
     const matchedCatches = await runDerivedRpc(

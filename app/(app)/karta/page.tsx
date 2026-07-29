@@ -387,7 +387,7 @@ export default function KartaPage() {
 
         map.addSource('sonar-depth', {
           type: 'vector',
-          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=2`],
+          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=3`],
           minzoom: 0,
           maxzoom: 18,
         })
@@ -549,22 +549,37 @@ export default function KartaPage() {
           type: 'line',
           source: 'sonar-depth',
           'source-layer': 'contours',
+          minzoom: 10,
           filter: [
             '!=',
-            ['%', ['round', ['to-number', ['get', 'depth'], 0]], 5],
+            [
+              '%',
+              [
+                'round',
+                ['*', ['to-number', ['get', 'depth'], 0], 2],
+              ],
+              5,
+            ],
             0,
           ],
           paint: {
-            'line-color': 'rgba(15,23,42,0.58)',
+            'line-color': 'rgba(15,23,42,0.64)',
             'line-width': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              8, 0.25,
-              13, 0.65,
-              17, 1.15,
+              10, 0.2,
+              13, 0.55,
+              17, 1,
             ],
-            'line-opacity': 0.58,
+            'line-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              10, 0.28,
+              12, 0.52,
+              15, 0.72,
+            ],
           },
           layout: {
             visibility:
@@ -579,9 +594,17 @@ export default function KartaPage() {
           type: 'line',
           source: 'sonar-depth',
           'source-layer': 'contours',
+          minzoom: 9,
           filter: [
             '==',
-            ['%', ['round', ['to-number', ['get', 'depth'], 0]], 5],
+            [
+              '%',
+              [
+                'round',
+                ['*', ['to-number', ['get', 'depth'], 0], 2],
+              ],
+              5,
+            ],
             0,
           ],
           paint: {
@@ -590,9 +613,9 @@ export default function KartaPage() {
               'interpolate',
               ['linear'],
               ['zoom'],
-              8, 0.55,
-              13, 1.15,
-              17, 2,
+              9, 0.5,
+              13, 1,
+              17, 1.8,
             ],
             'line-opacity': 0.86,
           },
@@ -610,14 +633,33 @@ export default function KartaPage() {
           source: 'sonar-depth',
           'source-layer': 'contours',
           minzoom: 12,
+          filter: [
+            '==',
+            [
+              '%',
+              [
+                'round',
+                ['*', ['to-number', ['get', 'depth'], 0], 2],
+              ],
+              5,
+            ],
+            0,
+          ],
           layout: {
             visibility:
               showDepth && sonarContoursRef.current ? 'visible' : 'none',
             'symbol-placement': 'line',
-            'symbol-spacing': 260,
+            'symbol-spacing': 220,
             'text-field': [
               'concat',
-              ['to-string', ['round', ['to-number', ['get', 'depth'], 0]]],
+              [
+                'number-format',
+                ['to-number', ['get', 'depth'], 0],
+                {
+                  'min-fraction-digits': 0,
+                  'max-fraction-digits': 1,
+                },
+              ],
               ' m',
             ],
             'text-size': [
