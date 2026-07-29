@@ -670,12 +670,6 @@ function SonarContextCard({ context }: { context: SonarLocationContext }) {
             value={`${context.waterTempC.toFixed(1)} °C`}
           />
         )}
-        {context.boatSpeedMs != null && (
-          <SonarInfoBox
-            label="Båtfart vid mätning"
-            value={`${context.boatSpeedMs.toFixed(1)} m/s`}
-          />
-        )}
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-cyan-200/70 pt-3 text-[10px] text-cyan-700 dark:border-cyan-900 dark:text-cyan-300">

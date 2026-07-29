@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import ChatWidget from '@/components/stats/ChatWidget'
 import AiFishingAnalysis from '@/components/stats/AiFishingAnalysis'
+import PikeSonarStats from '@/components/stats/PikeSonarStats'
 import { getCache, setCache } from '@/lib/cache'
 
 interface CatchProfile {
@@ -30,6 +31,11 @@ interface Catch {
   catcher_name: string | null
   solunar_period: 'major' | 'minor' | 'none' | null
   solunar_strength: number | null
+  exif_lat?: number | null
+  exif_lng?: number | null
+  location_encrypted?: boolean | null
+  encrypted_location?: string | null
+  encryption_iv?: string | null
   profiles?: CatchProfile
 }
 
@@ -540,9 +546,6 @@ export default function StatsPage() {
         Baserat på {totalCatches} fångster
       </p>
 
-      {/* AI analysis is private and always based on the signed-in user's own data. */}
-      {activeTab === 'mine' && <AiFishingAnalysis />}
-
       {/* Overview cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
         <StatCard label="Totalt fångster" value={totalCatches.toString()} color="bg-blue-50 dark:bg-blue-900/20" />
@@ -561,6 +564,16 @@ export default function StatsPage() {
         />
         <StatCard label="Favoritvatten" value={favoriteWater || '-'} color="bg-purple-50 dark:bg-purple-900/20" small />
       </div>
+
+      {activeTab === 'mine' && (
+        <>
+          <PikeSonarStats
+            key={`${filterSpecies}|${filterMethod}|${filterCatcher}|${filterYear}`}
+            catches={filteredCatches}
+          />
+          <AiFishingAnalysis />
+        </>
+      )}
 
       {/* Solunar-insikt */}
       {solunarStats && solunarStats.total >= 3 && (
