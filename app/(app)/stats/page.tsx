@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import ChatWidget from '@/components/stats/ChatWidget'
+import AiFishingAnalysis from '@/components/stats/AiFishingAnalysis'
 import { getCache, setCache } from '@/lib/cache'
 
 interface CatchProfile {
@@ -538,6 +539,9 @@ export default function StatsPage() {
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
         Baserat på {totalCatches} fångster
       </p>
+
+      {/* AI analysis is private and always based on the signed-in user's own data. */}
+      {activeTab === 'mine' && <AiFishingAnalysis />}
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 gap-3 mb-6">
