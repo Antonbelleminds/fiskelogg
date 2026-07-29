@@ -14,6 +14,7 @@ export interface CatchForAnalysis {
   moon_phase: string | null
   depth_m: number | null
   water_temp_c: number | null
+  location_encrypted?: boolean | null
 }
 
 export interface DistributionItem {
@@ -86,6 +87,7 @@ export interface FishingAnalysisInput {
     catchesAnalyzed: number
     sonarPoints: number
     matchedCatches: number
+    encryptedLocationCatches: number
     canCompareCatchLocationsToSonar: boolean
     bottomSignalIsBeta: boolean
     vegetationSignalIsBeta: boolean
@@ -285,6 +287,9 @@ export function buildFishingAnalysisInput(
     .map((caught) => finiteNumber(caught.depth_m))
     .filter((value): value is number => value !== null && value >= 0)
   const sonar = normalizeSonarContext(sonarValue)
+  const encryptedLocationCatches = catches.filter(
+    (caught) => caught.location_encrypted === true
+  ).length
 
   return {
     catches: {
@@ -323,6 +328,7 @@ export function buildFishingAnalysisInput(
       catchesAnalyzed: total,
       sonarPoints: sonar.pointCount,
       matchedCatches: sonar.matchedCatches,
+      encryptedLocationCatches,
       canCompareCatchLocationsToSonar: sonar.matchedCatches >= 3,
       bottomSignalIsBeta: true,
       vegetationSignalIsBeta: true,

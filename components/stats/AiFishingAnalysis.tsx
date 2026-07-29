@@ -12,6 +12,7 @@ interface AnalysisMeta {
     catchesAnalyzed: number
     sonarPoints: number
     matchedCatches: number
+    encryptedLocationCatches: number
     canCompareCatchLocationsToSonar: boolean
     bottomSignalIsBeta: boolean
     vegetationSignalIsBeta: boolean
