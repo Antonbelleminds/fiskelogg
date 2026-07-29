@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 45
 
 const MODEL = 'claude-haiku-4-5'
-const ANALYSIS_VERSION = 'fishing-analysis-v2'
+const ANALYSIS_VERSION = 'fishing-analysis-v3'
 const PAGE_SIZE = 500
 const MAX_CATCHES = 2_000
 const MIN_FORCE_REFRESH_MS = 2 * 60 * 1000
@@ -29,8 +29,6 @@ const ANALYSIS_OUTPUT_SCHEMA = {
     summary: { type: 'string' },
     findings: {
       type: 'array',
-      minItems: 1,
-      maxItems: 4,
       items: {
         type: 'object',
         properties: {
@@ -48,8 +46,6 @@ const ANALYSIS_OUTPUT_SCHEMA = {
     },
     nextActions: {
       type: 'array',
-      minItems: 1,
-      maxItems: 3,
       items: {
         type: 'object',
         properties: {
@@ -63,7 +59,6 @@ const ANALYSIS_OUTPUT_SCHEMA = {
     },
     limitations: {
       type: 'array',
-      maxItems: 4,
       items: { type: 'string' },
     },
   },
@@ -108,6 +103,7 @@ Krav:
 - Bottenhårdhet och vegetation är leverantörssignaler i beta, inte säkra artbestämningar.
 - Varje finding måste ha konkret evidence med antal, andel eller mätvärde från underlaget.
 - Ge hög confidence bara vid tydligt och tillräckligt datastöd.
+- Ge 1–4 findings, 1–3 nextActions och högst 4 limitations.
 - Returnera den strukturerade rapport som API-formatet kräver.
 
 Data:
