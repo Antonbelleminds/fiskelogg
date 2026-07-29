@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { getCache, setCache } from '@/lib/cache'
 import { useDecryptCatches } from '@/lib/useDecryptCatches'
 import { usePin } from '@/contexts/PinContext'
@@ -110,6 +111,7 @@ function fitLargestSonarSurvey(
 }
 
 export default function KartaPage() {
+  const router = useRouter()
   const { hasPinSet, isUnlocked, unlock } = usePin()
   const mapContainer = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
@@ -127,6 +129,7 @@ export default function KartaPage() {
   const [showSonarContours, setShowSonarContours] = useState(true)
   const [showSonarHillshade, setShowSonarHillshade] = useState(true)
   const [showSonarTracks, setShowSonarTracks] = useState(false)
+  const [sonarPanelMinimized, setSonarPanelMinimized] = useState(false)
   const [surveys, setSurveys] = useState<SonarSurvey[]>([])
   const [mapGeneration, setMapGeneration] = useState(0)
   const [mapPin, setMapPin] = useState('')
@@ -140,6 +143,7 @@ export default function KartaPage() {
   const sonarHillshadeRef = useRef(true)
   const sonarTracksRef = useRef(false)
   const mapFilterRef = useRef<MapFilter>('mine')
+  const shouldAutoFocusSonarRef = useRef(false)
   const allFeaturesRef = useRef<GeoJSON.Feature[]>([])
   const friendFeaturesRef = useRef<GeoJSON.Feature[]>([])
 
@@ -171,6 +175,7 @@ export default function KartaPage() {
     if (new URLSearchParams(window.location.search).get('djupkarta') === '1') {
       setDepthMap(true)
       depthMapRef.current = true
+      shouldAutoFocusSonarRef.current = true
     }
 
     fetch('/api/sonar/surveys')
@@ -369,8 +374,9 @@ export default function KartaPage() {
           'sonar-contours-minor', 'sonar-contours-major',
           'sonar-contour-labels',
           'sonar-tracks', 'sonar-waypoints',
-          'clusters', 'cluster-count', 'unclustered-point',
+          'clusters', 'cluster-count', 'unclustered-point', 'catch-hit-area',
           'friend-clusters', 'friend-cluster-count', 'friend-unclustered-point',
+          'friend-catch-hit-area',
           'catches-heat',
         ]
         layerIds.forEach((id) => {
@@ -773,6 +779,20 @@ export default function KartaPage() {
           layout: { visibility: showHeat ? 'none' : 'visible' },
         })
 
+        // Larger transparent touch target so sonar cells do not win taps near a catch.
+        map.addLayer({
+          id: 'catch-hit-area',
+          type: 'circle',
+          source: 'catches',
+          filter: ['!', ['has', 'point_count']],
+          paint: {
+            'circle-color': '#000',
+            'circle-radius': 20,
+            'circle-opacity': 0.001,
+          },
+          layout: { visibility: showHeat ? 'none' : 'visible' },
+        })
+
         // Friend cluster circles (BLUE)
         map.addLayer({
           id: 'friend-clusters',
@@ -813,6 +833,19 @@ export default function KartaPage() {
             'circle-radius': 8,
             'circle-stroke-width': 2,
             'circle-stroke-color': '#fff',
+          },
+          layout: { visibility: showFriends ? 'visible' : 'none' },
+        })
+
+        map.addLayer({
+          id: 'friend-catch-hit-area',
+          type: 'circle',
+          source: 'friend-catches',
+          filter: ['!', ['has', 'point_count']],
+          paint: {
+            'circle-color': '#000',
+            'circle-radius': 20,
+            'circle-opacity': 0.001,
           },
           layout: { visibility: showFriends ? 'visible' : 'none' },
         })
@@ -866,7 +899,7 @@ export default function KartaPage() {
         })
 
         // Click on own point
-        map.on('click', 'unclustered-point', (e) => {
+        map.on('click', 'catch-hit-area', (e) => {
           const props = e.features![0].properties!
           const coords = (e.features![0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
           const details = [
@@ -880,15 +913,26 @@ export default function KartaPage() {
                 ${details ? `<div style="font-size:13px;color:#64748b">${details}</div>` : ''}
                 ${props.water_body ? `<div style="font-size:12px;color:#94a3b8;margin-top:2px">${escapeHtml(props.water_body)}</div>` : ''}
                 <div style="font-size:12px;color:#94a3b8;margin-top:2px">${new Date(props.caught_at).toLocaleDateString('sv')}</div>
-                <a href="/fangst/${encodeURIComponent(props.id)}" style="display:block;margin-top:6px;font-size:12px;color:#27272a;text-decoration:none;font-weight:500">Visa detaljer &rarr;</a>
+                <a href="/fangst/${encodeURIComponent(props.id)}" data-catch-details style="display:block;margin-top:6px;font-size:12px;color:#27272a;text-decoration:none;font-weight:500">Visa detaljer &rarr;</a>
               </div>
             </div>
           `
-          new mapboxgl.Popup({ offset: 15 }).setLngLat(coords).setHTML(html).addTo(map)
+          const popup = new mapboxgl.Popup({ offset: 15 })
+            .setLngLat(coords)
+            .setHTML(html)
+            .addTo(map)
+          popup
+            .getElement()
+            ?.querySelector<HTMLAnchorElement>('[data-catch-details]')
+            ?.addEventListener('click', (event) => {
+              event.preventDefault()
+              popup.remove()
+              router.push(`/fangst/${encodeURIComponent(props.id)}`)
+            }, { once: true })
         })
 
         // Click on friend point
-        map.on('click', 'friend-unclustered-point', (e) => {
+        map.on('click', 'friend-catch-hit-area', (e) => {
           const props = e.features![0].properties!
           const coords = (e.features![0].geometry as GeoJSON.Point).coordinates.slice() as [number, number]
           const details = [
@@ -911,6 +955,18 @@ export default function KartaPage() {
 
         const inspectSonarPoint = async (e: mapboxgl.MapLayerMouseEvent) => {
           if (!depthMapRef.current) return
+          const catchLayers = [
+            'catch-hit-area',
+            'friend-catch-hit-area',
+            'clusters',
+            'friend-clusters',
+          ].filter((layerId) => Boolean(map.getLayer(layerId)))
+          if (
+            catchLayers.length > 0 &&
+            map.queryRenderedFeatures(e.point, { layers: catchLayers }).length > 0
+          ) {
+            return
+          }
           const { lng, lat } = e.lngLat
           const popup = new mapboxgl.Popup({ offset: 12 })
             .setLngLat([lng, lat])
@@ -982,9 +1038,9 @@ export default function KartaPage() {
           'sonar-hardness-fill',
           'sonar-vegetation-fill',
           'clusters',
-          'unclustered-point',
+          'catch-hit-area',
           'friend-clusters',
-          'friend-unclustered-point',
+          'friend-catch-hit-area',
         ]
         pointerLayers.forEach((layer) => {
           map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer' })
@@ -1015,11 +1071,19 @@ export default function KartaPage() {
       initializedMap?.remove()
       if (mapRef.current === initializedMap) mapRef.current = null
     }
-  }, [catches, friendCatches, loading, syncSonarLayerVisibility])
+  }, [catches, friendCatches, loading, router, syncSonarLayerVisibility])
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !depthMap || surveys.length === 0) return
+    if (
+      !map ||
+      !depthMap ||
+      surveys.length === 0 ||
+      !shouldAutoFocusSonarRef.current
+    ) {
+      return
+    }
+    shouldAutoFocusSonarRef.current = false
     fitLargestSonarSurvey(map, surveys)
   }, [depthMap, surveys, mapGeneration])
 
@@ -1034,6 +1098,7 @@ export default function KartaPage() {
       clusters: next ? 'none' : 'visible',
       'cluster-count': next ? 'none' : 'visible',
       'unclustered-point': next ? 'none' : 'visible',
+      'catch-hit-area': next ? 'none' : 'visible',
     }
     Object.entries(visibilityByLayer).forEach(([layer, visibility]) => {
       if (map.getLayer(layer)) {
@@ -1053,6 +1118,7 @@ export default function KartaPage() {
       'friend-clusters',
       'friend-cluster-count',
       'friend-unclustered-point',
+      'friend-catch-hit-area',
     ]) {
       if (map.getLayer(layer)) {
         map.setLayoutProperty(layer, 'visibility', showFriends)
@@ -1082,14 +1148,11 @@ export default function KartaPage() {
   function toggleDepthMap() {
     const map = mapRef.current
     if (!map) return
+    shouldAutoFocusSonarRef.current = false
     const next = !depthMap
     setDepthMap(next)
     depthMapRef.current = next
     syncSonarLayerVisibility(map)
-
-    if (next) {
-      fitLargestSonarSurvey(map, surveys)
-    }
   }
 
   function selectSonarLayer(mode: SonarLayerMode) {
@@ -1221,63 +1284,97 @@ export default function KartaPage() {
       </div>
 
       {depthMap && surveys.length > 0 && (
-        <div className="absolute left-4 top-24 z-10 w-64 max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200/80 bg-white/95 p-3 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
-          <div className="mb-2 flex items-center justify-between">
+        <div className={`absolute left-3 top-16 z-10 max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-200/80 bg-white/95 p-2.5 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 ${
+          sonarPanelMinimized ? 'w-40' : 'w-52'
+        }`}>
+          <div className={`flex items-center justify-between gap-2 ${
+            sonarPanelMinimized ? '' : 'mb-1.5'
+          }`}>
             <div>
               <div className="text-xs font-semibold text-slate-900 dark:text-white">
-                Egen sjökarta
+                Sjökarta
               </div>
               <div className="text-[9px] text-slate-500 dark:text-slate-400">
-                Humminbird AutoChart
+                AutoChart
               </div>
             </div>
-            <span className="rounded-full bg-cyan-50 px-2 py-1 text-[9px] font-semibold text-cyan-800 dark:bg-cyan-950 dark:text-cyan-200">
-              {surveys.length} mätningar
-            </span>
-          </div>
-
-          <div
-            role="tablist"
-            aria-label="Sjökartslager"
-            className="grid grid-cols-3 rounded-xl bg-slate-100 p-1 dark:bg-slate-800"
-          >
-            {([
-              ['depth', 'Djup'],
-              ['hardness', 'Hårdhet β'],
-              ['vegetation', 'Vegetation β'],
-            ] as const).map(([mode, label]) => (
+            <div className="flex items-center gap-1">
+              {!sonarPanelMinimized && (
+                <span className="rounded-full bg-cyan-50 px-1.5 py-0.5 text-[8px] font-semibold text-cyan-800 dark:bg-cyan-950 dark:text-cyan-200">
+                  {surveys.length} mätningar
+                </span>
+              )}
               <button
-                key={mode}
                 type="button"
-                role="tab"
-                aria-selected={sonarLayerMode === mode}
-                onClick={() => selectSonarLayer(mode)}
-                className={`rounded-lg px-1.5 py-1.5 text-[10px] font-semibold transition ${
-                  sonarLayerMode === mode
-                    ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
-                    : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
-                }`}
+                onClick={() => setSonarPanelMinimized((minimized) => !minimized)}
+                aria-label={
+                  sonarPanelMinimized
+                    ? 'Visa sjökartans kontroller'
+                    : 'Minimera sjökartan'
+                }
+                aria-expanded={!sonarPanelMinimized}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
-                {label}
+                <svg
+                  className={`h-3.5 w-3.5 transition-transform ${
+                    sonarPanelMinimized ? 'rotate-180' : ''
+                  }`}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m6 15 6-6 6 6" />
+                </svg>
               </button>
-            ))}
+            </div>
           </div>
 
-          <div className="mt-3">
+          {!sonarPanelMinimized && (
+            <>
+              <div
+                role="tablist"
+                aria-label="Sjökartslager"
+                className="grid grid-cols-3 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800"
+              >
+                {([
+                  ['depth', 'Djup'],
+                  ['hardness', 'Hård β'],
+                  ['vegetation', 'Växt β'],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={sonarLayerMode === mode}
+                    onClick={() => selectSonarLayer(mode)}
+                    className={`rounded-md px-1 py-1 text-[9px] font-semibold transition ${
+                      sonarLayerMode === mode
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-2">
             <div className="mb-1 flex items-center justify-between text-[9px] font-medium text-slate-600 dark:text-slate-300">
               <span>
                 {sonarLayerMode === 'depth'
                   ? 'Djup'
                   : sonarLayerMode === 'hardness'
-                    ? 'Relativ bottenrespons'
-                    : 'Relativ vegetationssignal'}
+                    ? 'Hårdhet'
+                    : 'Vegetation'}
               </span>
               <span>
                 {sonarLayerMode === 'depth' ? 'meter' : 'beta'}
               </span>
             </div>
             <div
-              className="h-3 rounded-full ring-1 ring-black/5"
+              className="h-2.5 rounded-full ring-1 ring-black/5"
               style={{
                 background:
                   sonarLayerMode === 'depth'
@@ -1306,19 +1403,18 @@ export default function KartaPage() {
             </div>
           </div>
 
-          {sonarLayerMode !== 'depth' && (
-            <p className="mt-2 text-[9px] leading-3.5 text-slate-500 dark:text-slate-400">
-              Relativ signal från ACU-filerna. Använd mönstret för att hitta
-              övergångar; exakt Humminbird-skala kalibreras vidare.
-            </p>
-          )}
+              {sonarLayerMode !== 'depth' && (
+                <p className="mt-1.5 text-[8px] leading-3 text-slate-500 dark:text-slate-400">
+                  Relativ ACU-signal (beta).
+                </p>
+              )}
 
-          <div className="mt-3 grid grid-cols-3 gap-1 border-t border-slate-200 pt-2 dark:border-slate-700">
+              <div className="mt-2 grid grid-cols-3 gap-1 border-t border-slate-200 pt-1.5 dark:border-slate-700">
             <button
               type="button"
               aria-pressed={showSonarContours}
               onClick={toggleSonarContours}
-              className={`rounded-lg px-1.5 py-1.5 text-[9px] font-semibold transition ${
+              className={`rounded-md px-1 py-1 text-[8px] font-semibold transition ${
                 showSonarContours
                   ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900'
                   : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
@@ -1330,7 +1426,7 @@ export default function KartaPage() {
               type="button"
               aria-pressed={showSonarHillshade}
               onClick={toggleSonarHillshade}
-              className={`rounded-lg px-1.5 py-1.5 text-[9px] font-semibold transition ${
+              className={`rounded-md px-1 py-1 text-[8px] font-semibold transition ${
                 showSonarHillshade
                   ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900'
                   : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
@@ -1342,15 +1438,17 @@ export default function KartaPage() {
               type="button"
               aria-pressed={showSonarTracks}
               onClick={toggleSonarTracks}
-              className={`rounded-lg px-1.5 py-1.5 text-[9px] font-semibold transition ${
+              className={`rounded-md px-1 py-1 text-[8px] font-semibold transition ${
                 showSonarTracks
                   ? 'bg-amber-500 text-white'
                   : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
               }`}
             >
-              Körspår
+              Spår
             </button>
           </div>
+            </>
+          )}
         </div>
       )}
 
