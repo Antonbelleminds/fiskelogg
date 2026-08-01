@@ -397,7 +397,7 @@ export default function KartaPage() {
 
         map.addSource('sonar-depth', {
           type: 'vector',
-          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=3`],
+          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=4`],
           minzoom: 0,
           maxzoom: 18,
         })
@@ -578,17 +578,17 @@ export default function KartaPage() {
               'interpolate',
               ['linear'],
               ['zoom'],
-              10, 0.2,
-              13, 0.55,
-              17, 1,
+              10, 0.3,
+              13, 0.7,
+              17, 1.15,
             ],
             'line-opacity': [
               'interpolate',
               ['linear'],
               ['zoom'],
-              10, 0.28,
-              12, 0.52,
-              15, 0.72,
+              10, 0.35,
+              12, 0.58,
+              15, 0.78,
             ],
           },
           layout: {
@@ -1313,7 +1313,7 @@ export default function KartaPage() {
                 Sjökarta
               </div>
               <div className="text-[9px] text-slate-500 dark:text-slate-400">
-                AutoChart
+                10 m yta · 0,5 m kurvor
               </div>
             </div>
             <div className="flex items-center gap-1">
