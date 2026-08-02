@@ -294,6 +294,8 @@ export default function KartaPage() {
       active && sonarHillshadeRef.current
     )
     for (const layerId of [
+      'sonar-coverage-contours',
+      'sonar-coverage-contour-labels',
       'sonar-contours-minor',
       'sonar-contours-major',
       'sonar-contour-labels',
@@ -376,6 +378,7 @@ export default function KartaPage() {
         const layerIds = [
           'sonar-depth-coverage', 'sonar-depth-fill', 'sonar-hardness-fill',
           'sonar-vegetation-fill', 'sonar-hillshade',
+          'sonar-coverage-contours', 'sonar-coverage-contour-labels',
           'sonar-contours-minor', 'sonar-contours-major',
           'sonar-contour-labels',
           'sonar-tracks', 'sonar-waypoints',
@@ -390,6 +393,9 @@ export default function KartaPage() {
         if (map.getSource('catches')) map.removeSource('catches')
         if (map.getSource('friend-catches')) map.removeSource('friend-catches')
         if (map.getSource('sonar-depth')) map.removeSource('sonar-depth')
+        if (map.getSource('sonar-coverage-contours')) {
+          map.removeSource('sonar-coverage-contours')
+        }
         if (map.getSource('sonar-signals')) map.removeSource('sonar-signals')
 
         const showDepth = depthMapRef.current
@@ -407,6 +413,15 @@ export default function KartaPage() {
           type: 'vector',
           tiles: [
             `${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=signals`,
+          ],
+          minzoom: 0,
+          maxzoom: 18,
+        })
+
+        map.addSource('sonar-coverage-contours', {
+          type: 'vector',
+          tiles: [
+            `${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=coverage-contours&v=1`,
           ],
           minzoom: 0,
           maxzoom: 18,
@@ -434,15 +449,10 @@ export default function KartaPage() {
               25, '#1e3a8a',
               40, '#0f172a',
             ],
-            'fill-opacity': [
-              'interpolate',
-              ['linear'],
-              ['to-number', ['get', 'confidence'], 0.1],
-              0, 0.18,
-              0.25, 0.36,
-              0.5, 0.52,
-              0.72, 0.64,
-            ],
+            // A constant opacity removes the checkerboard effect caused by
+            // per-cell confidence changes. Precision is instead communicated
+            // by the separate dashed contour style and the map legend.
+            'fill-opacity': 0.56,
             'fill-antialias': false,
             'fill-outline-color': 'rgba(0,0,0,0)',
           },
@@ -592,6 +602,86 @@ export default function KartaPage() {
           layout: {
             visibility:
               showDepth && sonarHillshadeRef.current ? 'visible' : 'none',
+          },
+        })
+
+        map.addLayer({
+          id: 'sonar-coverage-contours',
+          type: 'line',
+          source: 'sonar-coverage-contours',
+          'source-layer': 'coverage_contours',
+          minzoom: 10,
+          paint: {
+            'line-color': 'rgba(15,23,42,0.58)',
+            'line-width': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              10, 0.45,
+              13, 0.75,
+              17, 1.15,
+            ],
+            'line-opacity': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              10, 0.3,
+              13, 0.48,
+              16, 0.66,
+            ],
+            'line-dasharray': [3, 2],
+          },
+          layout: {
+            visibility:
+              showDepth && sonarContoursRef.current ? 'visible' : 'none',
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        })
+
+        map.addLayer({
+          id: 'sonar-coverage-contour-labels',
+          type: 'symbol',
+          source: 'sonar-coverage-contours',
+          'source-layer': 'coverage_contours',
+          minzoom: 13,
+          filter: [
+            '==',
+            ['%', ['round', ['to-number', ['get', 'depth'], 0]], 5],
+            0,
+          ],
+          layout: {
+            visibility:
+              showDepth && sonarContoursRef.current ? 'visible' : 'none',
+            'symbol-placement': 'line',
+            'symbol-spacing': 280,
+            'text-field': [
+              'concat',
+              [
+                'number-format',
+                ['to-number', ['get', 'depth'], 0],
+                {
+                  'min-fraction-digits': 0,
+                  'max-fraction-digits': 0,
+                },
+              ],
+              ' m',
+            ],
+            'text-size': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              13, 8,
+              16, 10,
+            ],
+            'text-max-angle': 35,
+            'text-padding': 4,
+          },
+          paint: {
+            'text-color': 'rgba(15,23,42,0.72)',
+            'text-halo-color': 'rgba(255,255,255,0.86)',
+            'text-halo-width': 1.25,
+            'text-halo-blur': 0.5,
           },
         })
 
@@ -1361,7 +1451,7 @@ export default function KartaPage() {
                 Sjökarta
               </div>
               <div className="text-[9px] text-slate-500 dark:text-slate-400">
-                10 m detalj · 25 m täckning
+                10 m mätt · 25 m interpolerat
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -1467,6 +1557,18 @@ export default function KartaPage() {
                 </>
               )}
             </div>
+            {sonarLayerMode === 'depth' && (
+              <div className="mt-1.5 flex items-center gap-2 text-[8px] text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1">
+                  <span className="block w-4 border-t border-slate-800 dark:border-slate-200" />
+                  Mätt
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="block w-4 border-t border-dashed border-slate-500" />
+                  Interpolerat
+                </span>
+              </div>
+            )}
           </div>
 
               {sonarLayerMode !== 'depth' && (

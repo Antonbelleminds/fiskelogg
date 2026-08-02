@@ -463,6 +463,7 @@ async function runDerivedRpc(
     | 'sonar_accumulate_bathymetry_coverage_bucket'
     | 'sonar_finalize_bathymetry_coverage_bucket'
     | 'sonar_clear_bathymetry_coverage_bucket'
+    | 'sonar_build_bathymetry_coverage_contours'
     | 'sonar_build_tracks'
     | 'sonar_build_contours'
     | 'sonar_match_catches',
@@ -696,6 +697,19 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
         { p_source_bucket: bucket }
       )
     }
+
+    await updateJobStage(
+      jobId,
+      userId,
+      'deriving',
+      'Skapar interpolerade djupkurvor'
+    )
+    await runDerivedRpc(
+      jobId,
+      userId,
+      'sonar_build_bathymetry_coverage_contours',
+      { p_interval_m: 1 }
+    )
 
     await updateJobStage(jobId, userId, 'deriving', 'Bygger spår')
     await runDerivedRpc(jobId, userId, 'sonar_build_tracks')

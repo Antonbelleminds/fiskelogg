@@ -43,7 +43,9 @@ export async function GET(
   const tileFunction =
     surface === 'signals'
       ? 'sonar_signal_vector_tile'
-      : 'sonar_vector_tile'
+      : surface === 'coverage-contours'
+        ? 'sonar_coverage_contour_vector_tile'
+        : 'sonar_vector_tile'
   const { data, error } = await admin.rpc(tileFunction, {
     p_user_id: user.id,
     p_z: z,
