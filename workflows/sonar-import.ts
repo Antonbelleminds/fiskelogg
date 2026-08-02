@@ -464,6 +464,8 @@ async function runDerivedRpc(
     | 'sonar_finalize_bathymetry_coverage_bucket'
     | 'sonar_clear_bathymetry_coverage_bucket'
     | 'sonar_build_bathymetry_coverage_contours'
+    | 'sonar_prepare_autochart_contours'
+    | 'sonar_build_autochart_contour_bucket'
     | 'sonar_build_tracks'
     | 'sonar_build_contours'
     | 'sonar_match_catches',
@@ -702,21 +704,24 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
       jobId,
       userId,
       'deriving',
-      'Skapar interpolerade djupkurvor'
+      'Bygger sammanhängande AutoChart-yta'
     )
-    await runDerivedRpc(
-      jobId,
-      userId,
-      'sonar_build_bathymetry_coverage_contours',
-      { p_interval_m: 1 }
-    )
+    await runDerivedRpc(jobId, userId, 'sonar_prepare_autochart_contours')
+    for (let bucket = 0; bucket < 64; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_build_autochart_contour_bucket',
+        {
+          p_bucket: bucket,
+          p_interval_m: 0.5,
+          p_max_gap_m: 175,
+        }
+      )
+    }
 
     await updateJobStage(jobId, userId, 'deriving', 'Bygger spår')
     await runDerivedRpc(jobId, userId, 'sonar_build_tracks')
-    await updateJobStage(jobId, userId, 'deriving', 'Skapar djupkonturer')
-    await runDerivedRpc(jobId, userId, 'sonar_build_contours', {
-      p_interval_m: 0.5,
-    })
     await updateJobStage(jobId, userId, 'matching', 'Matchar fångster')
     const matchedCatches = await runDerivedRpc(
       jobId,

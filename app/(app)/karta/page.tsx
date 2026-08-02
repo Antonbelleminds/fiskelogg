@@ -294,8 +294,6 @@ export default function KartaPage() {
       active && sonarHillshadeRef.current
     )
     for (const layerId of [
-      'sonar-coverage-contours',
-      'sonar-coverage-contour-labels',
       'sonar-contours-minor',
       'sonar-contours-major',
       'sonar-contour-labels',
@@ -396,6 +394,9 @@ export default function KartaPage() {
         if (map.getSource('sonar-coverage-contours')) {
           map.removeSource('sonar-coverage-contours')
         }
+        if (map.getSource('sonar-autochart-contours')) {
+          map.removeSource('sonar-autochart-contours')
+        }
         if (map.getSource('sonar-signals')) map.removeSource('sonar-signals')
 
         const showDepth = depthMapRef.current
@@ -418,10 +419,10 @@ export default function KartaPage() {
           maxzoom: 18,
         })
 
-        map.addSource('sonar-coverage-contours', {
+        map.addSource('sonar-autochart-contours', {
           type: 'vector',
           tiles: [
-            `${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=coverage-contours&v=1`,
+            `${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=autochart-contours&v=1`,
           ],
           minzoom: 0,
           maxzoom: 18,
@@ -606,90 +607,10 @@ export default function KartaPage() {
         })
 
         map.addLayer({
-          id: 'sonar-coverage-contours',
-          type: 'line',
-          source: 'sonar-coverage-contours',
-          'source-layer': 'coverage_contours',
-          minzoom: 10,
-          paint: {
-            'line-color': 'rgba(15,23,42,0.58)',
-            'line-width': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              10, 0.45,
-              13, 0.75,
-              17, 1.15,
-            ],
-            'line-opacity': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              10, 0.3,
-              13, 0.48,
-              16, 0.66,
-            ],
-            'line-dasharray': [3, 2],
-          },
-          layout: {
-            visibility:
-              showDepth && sonarContoursRef.current ? 'visible' : 'none',
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
-        })
-
-        map.addLayer({
-          id: 'sonar-coverage-contour-labels',
-          type: 'symbol',
-          source: 'sonar-coverage-contours',
-          'source-layer': 'coverage_contours',
-          minzoom: 13,
-          filter: [
-            '==',
-            ['%', ['round', ['to-number', ['get', 'depth'], 0]], 5],
-            0,
-          ],
-          layout: {
-            visibility:
-              showDepth && sonarContoursRef.current ? 'visible' : 'none',
-            'symbol-placement': 'line',
-            'symbol-spacing': 280,
-            'text-field': [
-              'concat',
-              [
-                'number-format',
-                ['to-number', ['get', 'depth'], 0],
-                {
-                  'min-fraction-digits': 0,
-                  'max-fraction-digits': 0,
-                },
-              ],
-              ' m',
-            ],
-            'text-size': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              13, 8,
-              16, 10,
-            ],
-            'text-max-angle': 35,
-            'text-padding': 4,
-          },
-          paint: {
-            'text-color': 'rgba(15,23,42,0.72)',
-            'text-halo-color': 'rgba(255,255,255,0.86)',
-            'text-halo-width': 1.25,
-            'text-halo-blur': 0.5,
-          },
-        })
-
-        map.addLayer({
           id: 'sonar-contours-minor',
           type: 'line',
-          source: 'sonar-depth',
-          'source-layer': 'contours',
+          source: 'sonar-autochart-contours',
+          'source-layer': 'autochart_contours',
           minzoom: 10,
           filter: [
             '!=',
@@ -716,10 +637,10 @@ export default function KartaPage() {
             'line-opacity': [
               'interpolate',
               ['linear'],
-              ['zoom'],
-              10, 0.35,
-              12, 0.58,
-              15, 0.78,
+              ['to-number', ['get', 'confidence'], 0.2],
+              0.15, 0.48,
+              0.5, 0.66,
+              1, 0.82,
             ],
           },
           layout: {
@@ -733,8 +654,8 @@ export default function KartaPage() {
         map.addLayer({
           id: 'sonar-contours-major',
           type: 'line',
-          source: 'sonar-depth',
-          'source-layer': 'contours',
+          source: 'sonar-autochart-contours',
+          'source-layer': 'autochart_contours',
           minzoom: 9,
           filter: [
             '==',
@@ -758,7 +679,14 @@ export default function KartaPage() {
               13, 1,
               17, 1.8,
             ],
-            'line-opacity': 0.86,
+            'line-opacity': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'confidence'], 0.2],
+              0.15, 0.62,
+              0.5, 0.78,
+              1, 0.92,
+            ],
           },
           layout: {
             visibility:
@@ -771,8 +699,8 @@ export default function KartaPage() {
         map.addLayer({
           id: 'sonar-contour-labels',
           type: 'symbol',
-          source: 'sonar-depth',
-          'source-layer': 'contours',
+          source: 'sonar-autochart-contours',
+          'source-layer': 'autochart_contours',
           minzoom: 12,
           filter: [
             '==',
@@ -1451,7 +1379,7 @@ export default function KartaPage() {
                 Sjökarta
               </div>
               <div className="text-[9px] text-slate-500 dark:text-slate-400">
-                10 m mätt · 25 m interpolerat
+                Sammanhängande 0,5 m-kurvor
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -1558,14 +1486,10 @@ export default function KartaPage() {
               )}
             </div>
             {sonarLayerMode === 'depth' && (
-              <div className="mt-1.5 flex items-center gap-2 text-[8px] text-slate-500 dark:text-slate-400">
+              <div className="mt-1.5 flex items-center gap-1 text-[8px] text-slate-500 dark:text-slate-400">
                 <span className="inline-flex items-center gap-1">
                   <span className="block w-4 border-t border-slate-800 dark:border-slate-200" />
-                  Mätt
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="block w-4 border-t border-dashed border-slate-500" />
-                  Interpolerat
+                  Mätt + modellerad bottenyta
                 </span>
               </div>
             )}
