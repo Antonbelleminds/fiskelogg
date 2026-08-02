@@ -459,6 +459,10 @@ async function runDerivedRpc(
     | 'sonar_finalize_bathymetry_bucket'
     | 'sonar_finalize_bathymetry_terrain_bucket'
     | 'sonar_clear_bathymetry_bucket'
+    | 'sonar_prepare_bathymetry_coverage'
+    | 'sonar_accumulate_bathymetry_coverage_bucket'
+    | 'sonar_finalize_bathymetry_coverage_bucket'
+    | 'sonar_clear_bathymetry_coverage_bucket'
     | 'sonar_build_tracks'
     | 'sonar_build_contours'
     | 'sonar_match_catches',
@@ -657,6 +661,38 @@ export async function sonarImportWorkflow(jobId: string, userId: string) {
         jobId,
         userId,
         'sonar_clear_bathymetry_bucket',
+        { p_source_bucket: bucket }
+      )
+    }
+
+    await updateJobStage(
+      jobId,
+      userId,
+      'deriving',
+      'Återställer djupkartans täckning'
+    )
+    await runDerivedRpc(jobId, userId, 'sonar_prepare_bathymetry_coverage')
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_accumulate_bathymetry_coverage_bucket',
+        { p_source_bucket: bucket }
+      )
+    }
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_finalize_bathymetry_coverage_bucket',
+        { p_target_bucket: bucket }
+      )
+    }
+    for (let bucket = 0; bucket < 32; bucket += 1) {
+      await runDerivedRpc(
+        jobId,
+        userId,
+        'sonar_clear_bathymetry_coverage_bucket',
         { p_source_bucket: bucket }
       )
     }

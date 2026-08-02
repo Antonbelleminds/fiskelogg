@@ -285,6 +285,7 @@ export default function KartaPage() {
       }
     }
 
+    setVisibility('sonar-depth-coverage', active && mode === 'depth')
     setVisibility('sonar-depth-fill', active && mode === 'depth')
     setVisibility('sonar-hardness-fill', active && mode === 'hardness')
     setVisibility('sonar-vegetation-fill', active && mode === 'vegetation')
@@ -373,7 +374,7 @@ export default function KartaPage() {
       function addSourcesAndLayers() {
         // Remove existing sources/layers if they exist (safety)
         const layerIds = [
-          'sonar-depth-fill', 'sonar-hardness-fill',
+          'sonar-depth-coverage', 'sonar-depth-fill', 'sonar-hardness-fill',
           'sonar-vegetation-fill', 'sonar-hillshade',
           'sonar-contours-minor', 'sonar-contours-major',
           'sonar-contour-labels',
@@ -397,7 +398,7 @@ export default function KartaPage() {
 
         map.addSource('sonar-depth', {
           type: 'vector',
-          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=4`],
+          tiles: [`${window.location.origin}/api/sonar/tiles/{z}/{x}/{y}?surface=5`],
           minzoom: 0,
           maxzoom: 18,
         })
@@ -409,6 +410,46 @@ export default function KartaPage() {
           ],
           minzoom: 0,
           maxzoom: 18,
+        })
+
+        map.addLayer({
+          id: 'sonar-depth-coverage',
+          type: 'fill',
+          source: 'sonar-depth',
+          'source-layer': 'depth_coverage',
+          minzoom: 13,
+          paint: {
+            'fill-color': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'depth'], 0],
+              0, '#ef4444',
+              1, '#f97316',
+              2, '#facc15',
+              3.5, '#84cc16',
+              5, '#22c55e',
+              7.5, '#14b8a6',
+              10, '#38bdf8',
+              15, '#2563eb',
+              25, '#1e3a8a',
+              40, '#0f172a',
+            ],
+            'fill-opacity': [
+              'interpolate',
+              ['linear'],
+              ['to-number', ['get', 'confidence'], 0.1],
+              0, 0.18,
+              0.25, 0.36,
+              0.5, 0.52,
+              0.72, 0.64,
+            ],
+            'fill-antialias': false,
+            'fill-outline-color': 'rgba(0,0,0,0)',
+          },
+          layout: {
+            visibility:
+              showDepth && sonarMode === 'depth' ? 'visible' : 'none',
+          },
         })
 
         map.addLayer({
@@ -959,6 +1000,11 @@ export default function KartaPage() {
 
         const inspectSonarPoint = async (e: mapboxgl.MapLayerMouseEvent) => {
           if (!depthMapRef.current) return
+          const originalEvent = e.originalEvent as MouseEvent & {
+            sonarInspectionHandled?: boolean
+          }
+          if (originalEvent.sonarInspectionHandled) return
+          originalEvent.sonarInspectionHandled = true
           const catchLayers = [
             'catch-hit-area',
             'friend-catch-hit-area',
@@ -1029,6 +1075,7 @@ export default function KartaPage() {
         }
 
         for (const layerId of [
+          'sonar-depth-coverage',
           'sonar-depth-fill',
           'sonar-hardness-fill',
           'sonar-vegetation-fill',
@@ -1038,6 +1085,7 @@ export default function KartaPage() {
 
         // Cursors
         const pointerLayers = [
+          'sonar-depth-coverage',
           'sonar-depth-fill',
           'sonar-hardness-fill',
           'sonar-vegetation-fill',
@@ -1313,7 +1361,7 @@ export default function KartaPage() {
                 Sjökarta
               </div>
               <div className="text-[9px] text-slate-500 dark:text-slate-400">
-                10 m yta · 0,5 m kurvor
+                10 m detalj · 25 m täckning
               </div>
             </div>
             <div className="flex items-center gap-1">
